@@ -87,7 +87,7 @@ On the demo site:
 - Project **PAY**, issue **PAY-12** "Simplify payment retry logic", with an **Acceptance criteria** section:
   1. A customer is never charged twice for one order
   2. Retries after a provider error succeed
-  3. A provider timeout leaves the order pending
+  3. A provider timeout marks the order payment_failed and creates no charge
 - A Confluence page **Payments retry spec**, linked from PAY-12 (Link → Confluence page).
 - The bug PR's title starts with `PAY-12:` so the agent finds the ticket.
 

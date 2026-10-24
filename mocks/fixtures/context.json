@@ -27,7 +27,7 @@
     "acceptanceCriteria": [
       "A customer is never charged twice for one order",
       "Retries after a provider error succeed",
-      "A provider timeout leaves the order in pending"
+      "A provider timeout marks the order payment_failed and creates no charge"
     ],
     "assignee": {
       "accountId": "557058:demo",
@@ -79,7 +79,7 @@
     {
       "id": "98305",
       "title": "Payments retry spec",
-      "excerpt": "Payments must be idempotent per order. A retry must never create a second charge. Provider timeouts leave the order pending."
+      "excerpt": "Payments must be idempotent per order. A retry must never create a second charge. A provider timeout marks the order payment_failed without charging; the customer can retry."
     }
   ]
 }
