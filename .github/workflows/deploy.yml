@@ -19,6 +19,14 @@ on:
         description: Install infra/edge/Caddyfile into the edge Caddy (keeps a backup) and reload it
         type: boolean
         default: false
+      smoke:
+        description: After deploying, run infra/smoke.sh on the VM (checkout-demo PR #1, about 2 min)
+        type: boolean
+        default: false
+      keep:
+        description: With smoke, keep the sandboxes up for the live view
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths: [runner/**, packages/**, infra/**, pnpm-lock.yaml, .github/workflows/deploy.yml]
@@ -74,3 +82,7 @@ jobs:
           curl -fsS "$PUBLIC_URL/healthz"; echo
           for i in $(seq 1 15); do curl -fsS "$PUBLIC_URL/health" && echo && exit 0; sleep 2; done
           echo "::error::runner not reachable through the edge Caddy"; exit 1
+      - name: Smoke test
+        if: steps.key.outputs.ok && inputs.smoke
+        timeout-minutes: 12
+        run: ssh -o IdentitiesOnly=yes -i ~/.ssh/vm "$VM_HOST" "cd /opt/pr-agent/app && sudo -n env KEEP=${{ inputs.keep && '1' || '' }} infra/smoke.sh"
