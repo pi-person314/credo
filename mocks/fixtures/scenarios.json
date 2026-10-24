@@ -41,7 +41,7 @@
     ],
     "rationale": "Baseline happy path",
     "sourceRefs": [
-      "jira:PAY-12#ac2"
+      "jira:PAY-5#ac2"
     ]
   },
   {
@@ -87,7 +87,7 @@
     ],
     "rationale": "PR removed the payment lock; retries are untested",
     "sourceRefs": [
-      "jira:PAY-12#ac1",
+      "jira:PAY-5#ac1",
       "greptile:c_8812"
     ]
   },
@@ -134,7 +134,7 @@
     ],
     "rationale": "Same race through the real UI, for the trace",
     "sourceRefs": [
-      "jira:PAY-12#ac1",
+      "jira:PAY-5#ac1",
       "greptile:c_8812"
     ]
   }

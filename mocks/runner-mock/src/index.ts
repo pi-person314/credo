@@ -111,7 +111,7 @@ app.post("/sessions", async (req, reply) => {
 app.post<{ Params: { id: string } }>("/sessions/:id/ask", async (req, reply) => {
   const { askId, prompt } = AskRunnerRequest.parse(req.body);
   const id = req.params.id;
-  const issueKey = sessions.get(id)?.issueKey ?? "PAY-12";
+  const issueKey = sessions.get(id)?.issueKey ?? "PAY-5";
   const scenario: Scenario = {
     id: `sc_ask_${askId.replace(/[^a-z0-9_]/gi, "").toLowerCase()}`,
     objective: prompt,
