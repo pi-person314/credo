@@ -47,6 +47,9 @@ importers:
       fastify:
         specifier: 4.28.1
         version: 4.28.1
+      yaml:
+        specifier: 2.6.1
+        version: 2.6.1
       zod:
         specifier: 3.23.8
         version: 3.23.8
@@ -884,6 +887,11 @@ packages:
     engines: {node: '>=8'}
     hasBin: true
 
+  yaml@2.6.1:
+    resolution: {integrity: sha512-7r0XPzioN/Q9kXBro/XPnA6kznR73DHq+GXh5ON7ZozRO6aMjbmiBuKste2wslTFkC5d1dw0GooOCepZXJ2SAg==}
+    engines: {node: '>= 14'}
+    hasBin: true
+
   zod@3.23.8:
     resolution: {integrity: sha512-XBx9AXhXktjUqnepgTiE5flcKIYWi/rme0Eaj+5Y0lftuGBq+jyRu/md4WnuxqgP1ubdpNCsYEYPxrzVHD8d6g==}
 
@@ -1579,5 +1587,7 @@ snapshots:
     dependencies:
       siginfo: 2.0.0
       stackback: 0.0.2
+
+  yaml@2.6.1: {}
 
   zod@3.23.8: {}
