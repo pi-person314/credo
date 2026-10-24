@@ -57,7 +57,8 @@ The VM already runs an edge Caddy in `/opt/pr-agent/edge` on 80/443 (HTTPS for t
 1. Once, on the VM: `cp .env.example /opt/pr-agent/app/.env` and fill it in. `PUBLIC_URL=https://<vm dns name>`.
 2. From a machine with SSH access: `VM_KEY=<key> infra/deploy.sh`. It ships `git HEAD`, runs `docker compose -f infra/compose.yml up -d --build runner`, and waits for `/health`.
 3. Forge: `forge variables set RUNNER_URL https://<vm dns name>`, add the host to `permissions.external.fetch.backend` and `frames` in `manifest.yml`, then `forge deploy`.
-4. Live view link for the panel: Forge signs it with `signSessionToken(RUNNER_TOKEN, sessionId)` from `src/contracts/token.ts`, or calls `GET /sessions/:id/view-url` (x-token).
+4. Smoke test: Actions → deploy → Run workflow with `smoke` (and `probe_only` to skip the redeploy), or `infra/smoke.sh` on the VM. It needs `GITHUB_TOKEN` in `.env` (Contents: read on the demo repo); after changing `.env`, recreate the runner with `docker compose -f infra/compose.yml up -d --force-recreate runner` (a plain restart keeps the old env).
+5. Live view link for the panel: Forge signs it with `signSessionToken(RUNNER_TOKEN, sessionId)` from `src/contracts/token.ts`, or calls `GET /sessions/:id/view-url` (x-token).
 
 ### GitHub webhook (on the demo repo)
 Settings → Webhooks → Add webhook:
