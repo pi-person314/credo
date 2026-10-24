@@ -4,6 +4,7 @@
 #
 # One-time setup (repo Settings → Secrets and variables → Actions):
 #   VM_SSH_KEY   private key whose .pub is in vmadmin's ~/.ssh/authorized_keys on the VM
+#   VM_GITHUB_TOKEN  optional; copied into the VM .env as GITHUB_TOKEN on every run (Contents: read on the demo repo)
 # and the VM's NSG must allow inbound 22 from GitHub Actions (simplest: any source, key auth only).
 #
 # Runs on every push to main that touches the runner side, and on demand (Actions → deploy → Run workflow).
@@ -73,6 +74,24 @@ jobs:
             sudo cp Caddyfile.new Caddyfile && sudo rm Caddyfile.new # in place: the file is bind-mounted by inode
             sudo docker compose -p pr-agent-edge exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
           ' < infra/edge/Caddyfile
+      - name: Sync GITHUB_TOKEN into the VM .env
+        # Optional repo secret VM_GITHUB_TOKEN (fine-grained PAT, Contents: read on the demo repo). Sent over stdin,
+        # never on a command line; the runner is recreated only when the value changed.
+        if: steps.key.outputs.ok
+        env: { TOKEN: '${{ secrets.VM_GITHUB_TOKEN }}' }
+        run: |
+          if [ -z "$TOKEN" ]; then echo "VM_GITHUB_TOKEN not set; leaving .env alone"; exit 0; fi
+          printf '%s\n' "$TOKEN" | ssh -o IdentitiesOnly=yes -i ~/.ssh/vm "$VM_HOST" '
+            set -e
+            cd /opt/pr-agent/app
+            IFS= read -r tok
+            cur=$(sudo -n grep -E "^GITHUB_TOKEN=" .env | head -1 | cut -d= -f2- || true)
+            if [ "$cur" = "$tok" ]; then echo "GITHUB_TOKEN unchanged"; exit 0; fi
+            sudo -n sed -i "/^GITHUB_TOKEN=/d" .env
+            printf "GITHUB_TOKEN=%s\n" "$tok" | sudo -n tee -a .env >/dev/null
+            echo "GITHUB_TOKEN updated; recreating the runner"
+            sudo -n docker compose -f infra/compose.yml up -d --force-recreate runner
+          '
       - name: Deploy
         if: steps.key.outputs.ok && !inputs.probe_only
         run: VM_KEY=~/.ssh/vm infra/deploy.sh

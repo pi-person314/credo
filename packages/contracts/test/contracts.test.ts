@@ -56,7 +56,7 @@ describe("coverage", () => {
   const d = (scenarioId: string, classification: Diff["classification"]): Diff => ({
     sessionId: "s", scenarioId, base: "PASS", head: "PASS", classification, runIds: [],
   });
-  const acs = ["never charged twice", "retry after error works", "timeout leaves pending"];
+  const acs = ["never charged twice", "retry after error works", "timeout fails without a charge"];
 
   it("maps diffs onto acceptance criteria", () => {
     const out = coverage("PAY-12", acs, scenarios, [
