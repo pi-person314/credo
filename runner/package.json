@@ -1,0 +1,18 @@
+{
+  "name": "@pr-agent/runner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "dev:cli": "tsx src/cli.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@pr-agent/contracts": "workspace:*",
+    "fastify": "4.28.1",
+    "zod": "3.23.8"
+  }
+}

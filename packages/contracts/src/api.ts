@@ -1,0 +1,78 @@
+import { z } from "zod";
+import { Context } from "./context.js";
+import { Ask, AuditEntry, Diff, Finding, Report, Run, Session } from "./domain.js";
+import { Env, SandboxState } from "./enums.js";
+import { Knobs, Scenario } from "./scenario.js";
+
+/** Header for runner <-> Forge calls. */
+export const TOKEN_HEADER = "x-token";
+
+// ---------- Runner API (runner implements, Forge app calls) ----------
+// Every call returns fast. Long work is reported back as Events to the Forge `runner-events` web trigger.
+
+export const RunnerRoutes = {
+  start: "POST /sessions", // whole pipeline: sandboxes -> plan -> run -> verify -> session.complete
+  ask: "POST /sessions/:id/ask",
+  knobs: "POST /sessions/:id/knobs",
+  reset: "POST /sessions/:id/reset",
+  status: "GET /sessions/:id/status",
+  teardown: "DELETE /sessions/:id",
+  view: "GET /view/:id", // ?t=<token>  live sandbox page, embedded in the Jira panel
+  preview: "GET /preview/:id/:env/*", // used by the live view page
+  live: "WS /live/:id/:env", // used by the live view page
+  artifacts: "GET /artifacts/:id/*", // ?t=<token>
+} as const;
+
+export const StartRequest = z.object({ context: Context });
+export type StartRequest = z.infer<typeof StartRequest>;
+
+export const AskRunnerRequest = z.object({ askId: z.string(), prompt: z.string().min(1).max(500) });
+export type AskRunnerRequest = z.infer<typeof AskRunnerRequest>;
+
+export const KnobsRequest = Knobs;
+export type KnobsRequest = z.infer<typeof KnobsRequest>;
+
+export const StatusResponse = z.object({ base: SandboxState, head: SandboxState });
+export type StatusResponse = z.infer<typeof StatusResponse>;
+
+// ---------- Forge app (A implements) ----------
+
+/** Web triggers. Their URLs come from `forge webtrigger` after install. */
+export const ForgeWebtriggers = {
+  github: "github-webhook", // GitHub pull_request events
+  events: "runner-events", // body: Event | Event[], header x-token
+} as const;
+
+/** Resolver functions the issue panel calls with invoke(). */
+export const PanelResolvers = [
+  "getSession", // { issueKey } -> SessionDetail | null
+  "getEvents", // { sessionId, after? } -> Event[]
+  "ask", // { sessionId, prompt }
+  "setKnobs", // { sessionId, provider, latencyMs }
+  "reset", // { sessionId }
+  "fileBug", // { sessionId, scenarioId }  click = human approval
+  "approveTransition", // { sessionId }        click = human approval
+  "getViewUrl", // { sessionId } -> signed runner /view URL
+] as const;
+
+/** Rovo agent actions (manifest `action` keys). */
+export const RovoActions = ["get-verification", "ask-test", "set-knobs", "file-regression-bug"] as const;
+
+export const SessionDetail = z.object({
+  session: Session,
+  findings: z.array(Finding),
+  scenarios: z.array(Scenario),
+  runs: z.array(Run),
+  diffs: z.array(Diff),
+  asks: z.array(Ask),
+  report: Report.optional(),
+  audit: z.array(AuditEntry).default([]),
+});
+export type SessionDetail = z.infer<typeof SessionDetail>;
+
+export const AskRequest = z.object({ prompt: z.string().min(1).max(500) });
+export type AskRequest = z.infer<typeof AskRequest>;
+
+export const viewPath = (sessionId: string, token: string) => `/view/${sessionId}?t=${encodeURIComponent(token)}`;
+export const previewPath = (sessionId: string, env: Env) => `/preview/${sessionId}/${env}/`;
+export const livePath = (sessionId: string, env: Env) => `/live/${sessionId}/${env}`;

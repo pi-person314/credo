@@ -1,0 +1,85 @@
+{
+  "session": {
+    "id": "ses_demo",
+    "repo": "pi-person314/pr-agent-demo",
+    "prNumber": 42,
+    "title": "PAY-12: Simplify payment retries",
+    "baseSha": "1111111111111111111111111111111111111111",
+    "headSha": "2222222222222222222222222222222222222222",
+    "status": "PLANNING",
+    "createdAt": "2026-10-24T12:00:00.000Z",
+    "issueKey": "PAY-12",
+    "prUrl": "https://github.com/pi-person314/pr-agent-demo/pull/42"
+  },
+  "prBody": "Removes the retry lock to simplify the payment flow.",
+  "changedFiles": [
+    {
+      "path": "src/payments/pay.ts",
+      "status": "modified",
+      "additions": 12,
+      "deletions": 31
+    }
+  ],
+  "jira": {
+    "key": "PAY-12",
+    "summary": "Simplify payment retry logic",
+    "description": "Retry code is hard to follow. Simplify it without changing behavior.",
+    "acceptanceCriteria": [
+      "A customer is never charged twice for one order",
+      "Retries after a provider error succeed",
+      "A provider timeout leaves the order in pending"
+    ],
+    "assignee": {
+      "accountId": "557058:demo",
+      "displayName": "Demo Dev"
+    }
+  },
+  "findings": [
+    {
+      "id": "fnd_1",
+      "sessionId": "ses_demo",
+      "source": "greptile",
+      "severity": "high",
+      "description": "Removing the lock may allow concurrent retries to create duplicate charges.",
+      "commitSha": "2222222222222222222222222222222222222222"
+    }
+  ],
+  "manifest": {
+    "api": [
+      "POST /api/orders",
+      "POST /api/pay",
+      "GET /api/orders/:id"
+    ],
+    "pages": [
+      "/cart",
+      "/checkout",
+      "/orders/:id"
+    ],
+    "selectors": {
+      "payButton": "[data-test=pay]",
+      "status": "[data-test=order-status]"
+    },
+    "fixtures": [
+      "cart_one_item",
+      "cart_two_items"
+    ],
+    "tables": [
+      "orders",
+      "charges"
+    ],
+    "providerModes": [
+      "ok",
+      "slow",
+      "timeout",
+      "error"
+    ]
+  },
+  "priorScenarioIds": [],
+  "confluence": [
+    {
+      "id": "98305",
+      "title": "Payments retry spec",
+      "excerpt": "Payments must be idempotent per order. A retry must never create a second charge. Provider timeouts leave the order pending."
+    }
+  ]
+}

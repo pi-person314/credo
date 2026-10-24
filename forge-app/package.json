@@ -1,0 +1,28 @@
+{
+  "name": "pr-confidence-forge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PR Confidence: a Jira Forge app that verifies PRs against their ticket in live base-vs-PR sandboxes.",
+  "main": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "deploy": "forge deploy",
+    "tunnel": "forge tunnel",
+    "lint": "forge lint"
+  },
+  "dependencies": {
+    "@forge/api": "^8.3.0",
+    "@forge/bridge": "^7.2.0",
+    "@forge/events": "^3.0.8",
+    "@forge/kvs": "^2.1.0",
+    "@forge/react": "^12.3.1",
+    "@forge/resolver": "^2.0.1",
+    "react": "^18.3.1",
+    "zod": "3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "@types/react": "18.3.12",
+    "typescript": "5.6.3"
+  }
+}
