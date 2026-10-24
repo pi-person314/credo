@@ -24,6 +24,7 @@ Full spec: [docs/SPEC.md](docs/SPEC.md) · Setup, secrets and accounts: [docs/SE
 
 ## Changelog
 
+- **Droid planner** (runner): prompts Factory Droid (`droid exec`, read-only) with the ticket, acceptance criteria, Confluence, findings, diff and manifest; validates the JSON against the Scenario schema and the manifest, retries once with the errors, falls back to canned scenarios (pipeline) or keyword templates (asks). Follow-ups: one round, up to 3, only after a surprise. Docs-only PRs route to STATIC_ONLY.
 - **Executor + verifier** (runner): runs scenario steps (`http`, `parallel`, `ui` via Playwright, `wait`) with `$name.path` references, checks `db_count` / `http_status` / `json_path` / `ui_text`, saves evidence (HTTP log, DB rows, screenshot, Playwright trace), streams the agent's browser as JPEG frames, reruns PR failures twice and labels each diff. Docker test: the 3 fixture scenarios give UNCHANGED_PASS, NEW_REGRESSION, NEW_REGRESSION on checkout-demo PR #1.
 - **Sandbox manager** (runner): checks out base and head at their SHAs, turns the demo repo's compose file into an isolated `sb-<session>-<env>` stack (no host ports, internal network, CPU/mem caps), waits for health, seeds, sets knobs, reads DB rows, tears down after idle TTL. Docker test proves base 1 charge vs PR 5.
 - **Signed session token** (contracts): `signSessionToken` / `verifySessionToken` in `@pr-agent/contracts/token` for the runner's `?t=` links. Forge's `getViewUrl` signs with `RUNNER_TOKEN`.
