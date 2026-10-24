@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { exec } from "../util/exec.js";
@@ -18,7 +18,7 @@ export interface DroidOptions {
 }
 
 /**
- * Factory Droid in headless mode: `droid exec "<prompt>"`, read-only (no --auto), in an empty
+ * Factory Droid in headless mode: `droid exec -f prompt.md --output-format json`, read-only (no --auto), in an empty
  * directory so it can't wander into our files. FACTORY_API_KEY authenticates it.
  */
 export class DroidLlm implements Llm {
@@ -32,22 +32,14 @@ export class DroidLlm implements Llm {
   async complete(prompt: string): Promise<string> {
     const cwd = mkdtempSync(join(tmpdir(), "droid-"));
     try {
-      const args = ["exec", ...(this.o.model ? ["--model", this.o.model] : []), "--output-format", "json", prompt];
-      const r = await exec(this.o.bin ?? "droid", args, {
-        cwd,
-        env: { FACTORY_API_KEY: this.o.apiKey },
-        timeoutMs: this.o.timeoutMs ?? 120_000,
-        allowFail: true,
-      });
+      // Prompt from a file (-f): long prompts stay off the command line.
+      writeFileSync(join(cwd, "prompt.md"), prompt);
+      const base = ["exec", ...(this.o.model ? ["--model", this.o.model] : []), "-f", "prompt.md"];
+      const run = (args: string[]) =>
+        exec(this.o.bin ?? "droid", args, { cwd, env: { FACTORY_API_KEY: this.o.apiKey }, timeoutMs: this.o.timeoutMs ?? 120_000, allowFail: true });
+      let r = await run([...base, "--output-format", "json"]);
       // Older CLIs may not know --output-format json: retry with plain text.
-      if (r.code !== 0 && /output-format|unknown option/i.test(r.stderr)) {
-        const t = await exec(this.o.bin ?? "droid", ["exec", ...(this.o.model ? ["--model", this.o.model] : []), prompt], {
-          cwd,
-          env: { FACTORY_API_KEY: this.o.apiKey },
-          timeoutMs: this.o.timeoutMs ?? 120_000,
-        });
-        return t.stdout;
-      }
+      if (r.code !== 0 && /output-format|unknown option/i.test(r.stderr)) r = await run(base);
       if (r.code !== 0) throw new Error(`droid exec exited ${r.code}: ${(r.stderr || r.stdout).trim().slice(-500)}`);
       return unwrap(r.stdout);
     } finally {
