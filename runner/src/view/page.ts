@@ -80,6 +80,9 @@ tr:last-child td { border-bottom: 0; }
 .feed div { padding: 3px 10px; border-bottom: 1px solid var(--line); display: flex; gap: 8px; }
 .feed time { color: var(--muted); font-family: ui-monospace, Menlo, monospace; flex: none; }
 .feed .fail { color: var(--bad); } .feed .ok { color: var(--ok); }
+.takeover { font-size: 13px; display: inline-flex; gap: 6px; align-items: center; }
+.drive { background: var(--card); border: 1px dashed var(--accent); border-radius: 6px; padding: 6px 10px; }
+.driving .screen img { cursor: crosshair; outline: 2px solid var(--accent); }
 .toast { position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 6px 12px; border-radius: 4px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; }
 .toast.show { opacity: .95; }
 </style>
@@ -95,6 +98,7 @@ tr:last-child td { border-bottom: 0; }
       <button role="tab" id="tab-watch" aria-selected="true">Watch the agent</button>
       <button role="tab" id="tab-try" aria-selected="false">Try it yourself</button>
     </div>
+    <label class="takeover"><input type="checkbox" id="takeover"> Take over the agent's browser</label>
     <div class="knobs">
       <label for="provider">Provider</label>
       <select id="provider"><option>ok</option><option>slow</option><option>timeout</option><option>error</option></select>
@@ -103,6 +107,14 @@ tr:last-child td { border-bottom: 0; }
       <button class="btn primary" id="apply">Apply to both</button>
       <button class="btn" id="reset">Reset both</button>
     </div>
+  </div>
+  <div class="bar drive" id="drive" hidden>
+    <span class="refs">Click or double-click a screen to drive it.</span>
+    <label><input type="checkbox" id="mirror" checked> Same input on both</label>
+    <input id="typetext" placeholder="Type into the focused field" size="24">
+    <button class="btn" id="typebtn">Type</button>
+    <button class="btn" id="enterbtn">Enter</button>
+    <button class="btn" id="homebtn">Go to start</button>
   </div>
   <div class="panes">
     ${["base", "head"]
@@ -152,13 +164,36 @@ function setMode(m) {
   $("tab-try").setAttribute("aria-selected", m === "try");
   for (const env of ENVS) {
     const frame = $("frame-" + env);
-    if (m === "try" && !frame.src) frame.src = "/preview/" + encodeURIComponent(BOOT.id) + "/" + env + "/" + encodeURIComponent(BOOT.t) + "/cart";
+    if (m === "try" && !frame.src) frame.src = "/preview/" + encodeURIComponent(BOOT.id) + "/" + env + "/" + encodeURIComponent(BOOT.t) + startPage;
     frame.hidden = m !== "try";
     $("img-" + env).hidden = m !== "watch" || !$("img-" + env).src;
     $("empty-" + env).hidden = m === "try" || !!$("img-" + env).src;
     $("step-" + env).style.visibility = m === "watch" ? "visible" : "hidden";
   }
 }
+$("takeover").onchange = () => {
+  const on = $("takeover").checked;
+  $("drive").hidden = !on;
+  document.body.classList.toggle("driving", on);
+  if (on) setMode("watch");
+};
+let lastEnv = "head";
+let startPage = "/";
+async function drive(env, body) {
+  lastEnv = env;
+  try { await post("input", { env: $("mirror").checked ? "both" : env, ...body }); } catch (e) { toast(e.message); }
+}
+for (const env of ENVS) {
+  const img = $("img-" + env);
+  const at = (e) => { const r = img.getBoundingClientRect(); return { x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) }; };
+  let timer;
+  img.addEventListener("click", (e) => { if (!$("takeover").checked) return; clearTimeout(timer); const p = at(e); timer = setTimeout(() => drive(env, { action: "click", ...p }), 250); });
+  img.addEventListener("dblclick", (e) => { if (!$("takeover").checked) return; clearTimeout(timer); drive(env, { action: "dblclick", ...at(e) }); });
+  img.addEventListener("wheel", (e) => { if (!$("takeover").checked) return; e.preventDefault(); drive(env, { action: "scroll", dy: e.deltaY }); }, { passive: false });
+}
+$("typebtn").onclick = () => drive(lastEnv, { action: "type", text: $("typetext").value });
+$("enterbtn").onclick = () => drive(lastEnv, { action: "press", key: "Enter" });
+$("homebtn").onclick = () => drive(lastEnv, { action: "goto", path: startPage });
 $("tab-watch").onclick = () => setMode("watch");
 $("tab-try").onclick = () => setMode("try");
 
@@ -192,6 +227,7 @@ $("reset").onclick = async () => {
 
 function render(s) {
   if (s.title) $("title").textContent = s.title;
+  if (s.startPage) startPage = s.startPage;
   $("status").textContent = s.status;
   for (const env of ENVS) {
     const st = s.sandboxes[env];

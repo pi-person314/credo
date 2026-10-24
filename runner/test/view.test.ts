@@ -45,3 +45,11 @@ describe("browser routes", () => {
     expect(res.json()).toMatchObject({ status: "UNKNOWN", sandboxes: { base: "down", head: "down" } });
   });
 });
+
+describe("take over", () => {
+  it("needs a token and a known session, and validates input", async () => {
+    expect((await app.inject({ method: "POST", url: `/view/ses_1/input`, payload: { env: "base", action: "click" } })).statusCode).toBe(403);
+    expect((await app.inject({ method: "POST", url: `/view/ses_1/input?t=${t}`, payload: { env: "base", action: "click" } })).statusCode).toBe(404);
+    expect((await app.inject({ method: "POST", url: `/view/ses_1/input?t=${t}`, payload: { env: "x", action: "click" } })).statusCode).toBe(400);
+  });
+});
