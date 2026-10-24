@@ -27,6 +27,7 @@ modules:
         function: resolver
       render: native
       title: PR Confidence
+      icon: https://developer.atlassian.com/platform/forge/images/icons/issue-panel-icon.svg
       # TODO(A, spike H0-2): live view embed. Try a Custom UI resource rendered with UI Kit <Frame>,
       # plus permissions.external.frames below. Fallback: LinkButton that opens getViewUrl() in a new tab.
 
@@ -123,12 +124,11 @@ permissions:
     fetch:
       backend:
         - api.github.com
-        - RUNNER_HOST_TODO # e.g. pr-agent-runner.eastus.cloudapp.azure.com
+        - pr-agent-saksham-20261024.westus2.cloudapp.azure.com # the runner VM
     # frames:
-    #   - RUNNER_HOST_TODO
+    #   - pr-agent-saksham-20261024.westus2.cloudapp.azure.com
 
 app:
   runtime:
     name: nodejs22.x
-  # id is filled in by `forge register`. Leave commented until then.
-  # id: ari:cloud:ecosystem::app/YOUR-APP-ID-HERE
+  id: ari:cloud:ecosystem::app/a2f8cc5b-193b-44d0-8d3a-a74506e2f7c8

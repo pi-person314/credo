@@ -5,9 +5,15 @@ import { appendEvents } from "../lib/store";
 
 /** Runner -> Forge. Body is one Event or an array. */
 export async function runnerEvents(req: WebTriggerRequest) {
-  if (header(req.headers, TOKEN_HEADER) !== process.env.RUNNER_TOKEN) return respond(401);
-  const raw = JSON.parse(req.body);
-  const events = (Array.isArray(raw) ? raw : [raw]).map((e: unknown) => Event.parse(e));
+  const token = process.env.RUNNER_TOKEN;
+  if (!token || header(req.headers, TOKEN_HEADER) !== token) return respond(401);
+  let events: Event[];
+  try {
+    const raw = JSON.parse(req.body);
+    events = (Array.isArray(raw) ? raw : [raw]).map((e: unknown) => Event.parse(e));
+  } catch {
+    return respond(400, { error: "bad event body" });
+  }
   const bySession = new Map<string, Event[]>();
   for (const e of events) bySession.set(e.sessionId, [...(bySession.get(e.sessionId) ?? []), e]);
   for (const [sessionId, list] of bySession) await appendEvents(sessionId, list);
