@@ -62,7 +62,7 @@ jobs:
             sudo cp Caddyfile "Caddyfile.bak.$(date +%Y%m%d%H%M%S)"
             sudo tee Caddyfile.new >/dev/null
             sudo docker run --rm -v "$PWD/Caddyfile.new:/etc/caddy/Caddyfile:ro" caddy:2.8 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
-            sudo mv Caddyfile.new Caddyfile
+            sudo cp Caddyfile.new Caddyfile && sudo rm Caddyfile.new # in place: the file is bind-mounted by inode
             sudo docker compose -p pr-agent-edge exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
           ' < infra/edge/Caddyfile
       - name: Deploy
