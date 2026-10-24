@@ -1,0 +1,134 @@
+# Owner: Person A. See docs/SPEC.md sections 4-8.
+modules:
+  # GitHub sends pull_request events here. Reply fast, then hand off to the ingest queue.
+  webtrigger:
+    - key: github-webhook
+      function: githubWebhook
+      response:
+        type: dynamic
+    # The runner posts every Event here (header x-token).
+    - key: runner-events
+      function: runnerEvents
+      response:
+        type: dynamic
+
+  # Reads Jira, Confluence and GitHub, creates the session, starts the runner.
+  consumer:
+    - key: ingest-consumer
+      queue: ingest
+      resolver:
+        function: ingestConsumer
+        method: ingest
+
+  jira:issuePanel:
+    - key: pr-confidence-panel
+      resource: panel
+      resolver:
+        function: resolver
+      render: native
+      title: PR Confidence
+      # TODO(A, spike H0-2): live view embed. Try a Custom UI resource rendered with UI Kit <Frame>,
+      # plus permissions.external.frames below. Fallback: LinkButton that opens getViewUrl() in a new tab.
+
+  rovo:agent:
+    - key: pr-confidence-agent
+      name: PR Confidence
+      description: >
+        Checks a pull request against its Jira ticket by running it next to the old code in live
+        sandboxes. Answers what was verified, runs new tests you describe, and files a Bug when
+        something broke.
+      prompt: |
+        You are PR Confidence, a verification agent for one Jira issue and its pull request.
+        Use get-verification to read the current verdict, acceptance-criteria coverage and results.
+        Never invent results. Only report what get-verification returns.
+        When the user describes a test ("what if the provider times out?"), call ask-test with their words.
+        Tell them it runs on both the old and new code and will appear in the PR Confidence panel.
+        When the user wants failure conditions changed, call set-knobs.
+        Only call file-regression-bug after you have shown which scenario it is for and the user said yes.
+        Never say a PR is safe to merge. Say what was checked, what failed, and what was not tested.
+      conversationStarters:
+        - What did you verify on this PR?
+        - What if the payment provider times out?
+        - File a bug for the failing test
+      actions:
+        - get-verification
+        - ask-test
+        - set-knobs
+        - file-regression-bug
+
+  action:
+    - key: get-verification
+      name: Get verification status
+      function: rovoGetVerification
+      actionVerb: GET
+      description: Read-only. Verdict, acceptance-criteria coverage, scenario results and open risks for an issue.
+      inputs:
+        issueKey: { title: Issue key, type: string, required: true, description: The Jira issue key, e.g. PAY-12. }
+    - key: ask-test
+      name: Ask for a test
+      function: rovoAskTest
+      actionVerb: TRIGGER
+      description: Turns a plain-English test request into a scenario and runs it on base and PR.
+      inputs:
+        issueKey: { title: Issue key, type: string, required: true, description: The Jira issue key. }
+        prompt: { title: Test request, type: string, required: true, description: What to test, in the user's words. }
+    - key: set-knobs
+      name: Set failure knobs
+      function: rovoSetKnobs
+      actionVerb: TRIGGER
+      description: Sets the fake payment provider mode on both sandboxes.
+      inputs:
+        issueKey: { title: Issue key, type: string, required: true, description: The Jira issue key. }
+        provider: { title: Provider mode, type: string, required: true, description: "One of ok, slow, timeout, error." }
+        latencyMs: { title: Latency (ms), type: integer, required: false, description: Delay added to provider calls. }
+    - key: file-regression-bug
+      name: File regression bug
+      function: rovoFileBug
+      actionVerb: CREATE
+      description: Creates a Bug linked to the issue with repro steps and evidence. Only after the user confirmed.
+      inputs:
+        issueKey: { title: Issue key, type: string, required: true, description: The Jira issue key. }
+        scenarioId: { title: Scenario, type: string, required: true, description: The failing scenario id. }
+
+  function:
+    - key: githubWebhook
+      handler: index.githubWebhook
+    - key: runnerEvents
+      handler: index.runnerEvents
+    - key: ingestConsumer
+      handler: index.ingestConsumer
+    - key: resolver
+      handler: index.resolver
+    - key: rovoGetVerification
+      handler: index.rovoGetVerification
+    - key: rovoAskTest
+      handler: index.rovoAskTest
+    - key: rovoSetKnobs
+      handler: index.rovoSetKnobs
+    - key: rovoFileBug
+      handler: index.rovoFileBug
+
+resources:
+  - key: panel
+    path: src/frontend/index.tsx
+
+permissions:
+  scopes:
+    - read:jira-work
+    - write:jira-work
+    - read:jira-user
+    - read:confluence-content.summary
+    - storage:app
+  external:
+    fetch:
+      backend:
+        - api.github.com
+        - RUNNER_HOST_TODO # e.g. pr-agent-runner.eastus.cloudapp.azure.com
+    # frames:
+    #   - RUNNER_HOST_TODO
+
+app:
+  runtime:
+    name: nodejs22.x
+  # id is filled in by `forge register`. Leave commented until then.
+  # id: ari:cloud:ecosystem::app/YOUR-APP-ID-HERE

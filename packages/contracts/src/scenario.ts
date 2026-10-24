@@ -1,0 +1,93 @@
+import { z } from "zod";
+import { Origin, Priority, ProviderMode } from "./enums.js";
+
+/** Values may reference saved results, e.g. "$order.id". */
+const Json: z.ZodType<unknown> = z.lazy(() =>
+  z.union([z.string(), z.number(), z.boolean(), z.null(), z.array(Json), z.record(Json)]),
+);
+
+export const Knobs = z.object({
+  provider: ProviderMode,
+  latencyMs: z.number().int().min(0).max(30_000).default(0),
+});
+export type Knobs = z.infer<typeof Knobs>;
+
+export const HttpStep = z.object({
+  op: z.literal("http"),
+  method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]),
+  path: z.string().startsWith("/"),
+  body: Json.optional(),
+  headers: z.record(z.string()).optional(),
+  saveAs: z.string().optional(),
+});
+export type HttpStep = z.infer<typeof HttpStep>;
+
+export const ParallelStep = z.object({
+  op: z.literal("parallel"),
+  count: z.number().int().min(2).max(20),
+  step: HttpStep,
+});
+
+export const UiStep = z.object({
+  op: z.literal("ui"),
+  action: z.enum(["goto", "click", "dblclick", "fill"]),
+  /** goto: a path. click/dblclick/fill: a selector or a manifest selector name. */
+  target: z.string(),
+  value: z.string().optional(),
+});
+
+export const WaitStep = z.object({
+  op: z.literal("wait"),
+  ms: z.number().int().min(0).max(30_000),
+});
+
+export const Step = z.discriminatedUnion("op", [HttpStep, ParallelStep, UiStep, WaitStep]);
+export type Step = z.infer<typeof Step>;
+
+const AssertionBase = { id: z.string().min(1) };
+
+export const Assertion = z.discriminatedUnion("type", [
+  z.object({
+    ...AssertionBase,
+    type: z.literal("db_count"),
+    table: z.string(),
+    where: z.record(Json).default({}),
+    equals: z.number().int().min(0),
+  }),
+  z.object({
+    ...AssertionBase,
+    type: z.literal("http_status"),
+    /** saveAs name of an http step. */
+    ref: z.string(),
+    equals: z.number().int(),
+  }),
+  z.object({
+    ...AssertionBase,
+    type: z.literal("json_path"),
+    ref: z.string(),
+    path: z.string(),
+    equals: Json,
+  }),
+  z.object({
+    ...AssertionBase,
+    type: z.literal("ui_text"),
+    selector: z.string(),
+    contains: z.string(),
+  }),
+]);
+export type Assertion = z.infer<typeof Assertion>;
+
+/** The only thing the planner writes. The runner executes it the same way every time. */
+export const Scenario = z.object({
+  id: z.string().regex(/^sc_[a-z0-9_]+$/),
+  objective: z.string().min(1),
+  origin: Origin,
+  priority: Priority,
+  fixture: z.string(),
+  knobs: Knobs.optional(),
+  steps: z.array(Step).min(1).max(20),
+  assertions: z.array(Assertion).min(1).max(10),
+  rationale: z.string(),
+  sourceRefs: z.array(z.string()).default([]),
+});
+export type Scenario = z.infer<typeof Scenario>;

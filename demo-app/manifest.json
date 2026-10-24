@@ -1,0 +1,11 @@
+{
+  "api": ["POST /api/orders", "POST /api/pay", "GET /api/orders/:id"],
+  "pages": ["/cart", "/checkout", "/orders/:id"],
+  "selectors": {
+    "payButton": "[data-test=pay]",
+    "status": "[data-test=order-status]"
+  },
+  "fixtures": ["cart_one_item", "cart_two_items"],
+  "tables": ["orders", "charges"],
+  "providerModes": ["ok", "slow", "timeout", "error"]
+}

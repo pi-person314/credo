@@ -1,0 +1,5 @@
+# forge-app is deliberately NOT a workspace package: Forge bundles it from a plain npm node_modules.
+packages:
+  - packages/*
+  - runner
+  - mocks/runner-mock

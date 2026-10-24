@@ -1,0 +1,4 @@
+# HTTPS for the runner: API (Forge calls it), live view (embedded in Jira), previews, WebSocket, artifacts.
+{$DOMAIN} {
+	reverse_proxy runner:4100
+}

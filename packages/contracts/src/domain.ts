@@ -1,0 +1,126 @@
+import { z } from "zod";
+import {
+  AssertionResult,
+  Coverage,
+  DiffClass,
+  Env,
+  Recommendation,
+  Route,
+  SessionStatus,
+  Severity,
+} from "./enums.js";
+
+export const Session = z.object({
+  id: z.string(),
+  repo: z.string(), // "owner/name"
+  prNumber: z.number().int(),
+  prUrl: z.string().url().optional(),
+  title: z.string(),
+  baseSha: z.string(),
+  headSha: z.string(),
+  /** Every session belongs to one Jira issue; the panel looks it up by this key. */
+  issueKey: z.string(),
+  status: SessionStatus,
+  route: Route.optional(),
+  recommendation: Recommendation.optional(),
+  error: z.string().optional(),
+  createdAt: z.string().datetime(),
+});
+export type Session = z.infer<typeof Session>;
+
+export const Finding = z.object({
+  id: z.string(),
+  sessionId: z.string(),
+  source: z.enum(["github", "jira", "confluence", "greptile", "planner"]),
+  severity: Severity,
+  description: z.string(),
+  url: z.string().url().optional(),
+  commitSha: z.string().optional(),
+});
+export type Finding = z.infer<typeof Finding>;
+
+export const ArtifactRef = z.object({
+  kind: z.enum(["trace", "screenshot", "log", "db"]),
+  /** Relative to ARTIFACTS_DIR, served by core at /artifacts/<path>. */
+  path: z.string(),
+});
+export type ArtifactRef = z.infer<typeof ArtifactRef>;
+
+export const AssertionOutcome = z.object({
+  id: z.string(),
+  result: AssertionResult,
+  expected: z.unknown().optional(),
+  actual: z.unknown().optional(),
+  note: z.string().optional(),
+});
+export type AssertionOutcome = z.infer<typeof AssertionOutcome>;
+
+export const Run = z.object({
+  id: z.string(),
+  sessionId: z.string(),
+  scenarioId: z.string(),
+  env: Env,
+  sha: z.string(),
+  attempt: z.number().int().min(1),
+  /** Overall result: FAIL if any assertion fails, INCONCLUSIVE on crash/timeout. */
+  status: AssertionResult,
+  durationMs: z.number().int().min(0),
+  assertions: z.array(AssertionOutcome),
+  artifacts: z.array(ArtifactRef),
+});
+export type Run = z.infer<typeof Run>;
+
+export const Diff = z.object({
+  sessionId: z.string(),
+  scenarioId: z.string(),
+  base: AssertionResult,
+  head: AssertionResult,
+  classification: DiffClass,
+  runIds: z.array(z.string()),
+});
+export type Diff = z.infer<typeof Diff>;
+
+export const Ask = z.object({
+  id: z.string(),
+  sessionId: z.string(),
+  prompt: z.string().min(1),
+  scenarioId: z.string().optional(),
+  createdAt: z.string().datetime(),
+});
+export type Ask = z.infer<typeof Ask>;
+
+/** Status of one acceptance criterion from the Jira issue. */
+export const AcCoverage = z.object({
+  index: z.number().int().min(1), // 1-based, matches "jira:KEY#ac<index>" in Scenario.sourceRefs
+  text: z.string(),
+  status: Coverage,
+  scenarioIds: z.array(z.string()),
+});
+export type AcCoverage = z.infer<typeof AcCoverage>;
+
+/** One write the agent made (or proposed) in Jira or GitHub. Shown in the panel's audit log. */
+export const AuditEntry = z.object({
+  ts: z.string().datetime(),
+  sessionId: z.string(),
+  action: z.enum(["jira.comment", "jira.bug", "jira.transition", "github.comment", "github.status"]),
+  target: z.string(), // issue key, PR url, ...
+  approvedBy: z.string().optional(), // accountId of the human who clicked/confirmed
+  inputs: z.unknown().optional(),
+  reason: z.string(),
+  result: z.enum(["ok", "failed", "proposed"]),
+});
+export type AuditEntry = z.infer<typeof AuditEntry>;
+
+export const Report = z.object({
+  sessionId: z.string(),
+  passed: z.number().int(),
+  failed: z.number().int(),
+  inconclusive: z.number().int(),
+  notRun: z.number().int(),
+  risks: z.array(z.string()),
+  coverage: z.array(AcCoverage),
+  recommendation: Recommendation,
+  markdown: z.string(),
+  publishedAt: z.string().datetime().optional(),
+});
+export type Report = z.infer<typeof Report>;

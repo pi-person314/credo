@@ -1,0 +1,141 @@
+[
+  {
+    "id": "sc_single_pay",
+    "objective": "One pay call makes exactly 1 charge",
+    "origin": "planner",
+    "priority": "P1",
+    "fixture": "cart_one_item",
+    "steps": [
+      {
+        "op": "http",
+        "method": "POST",
+        "path": "/api/orders",
+        "saveAs": "order"
+      },
+      {
+        "op": "http",
+        "method": "POST",
+        "path": "/api/pay",
+        "body": {
+          "orderId": "$order.id"
+        },
+        "saveAs": "pay"
+      }
+    ],
+    "assertions": [
+      {
+        "id": "a1",
+        "type": "http_status",
+        "ref": "pay",
+        "equals": 200
+      },
+      {
+        "id": "a2",
+        "type": "db_count",
+        "table": "charges",
+        "where": {
+          "orderId": "$order.id"
+        },
+        "equals": 1
+      }
+    ],
+    "rationale": "Baseline happy path",
+    "sourceRefs": [
+      "jira:PAY-12#ac2"
+    ]
+  },
+  {
+    "id": "sc_concurrent_retry",
+    "objective": "5 retries at once make exactly 1 charge",
+    "origin": "planner",
+    "priority": "P0",
+    "fixture": "cart_one_item",
+    "knobs": {
+      "provider": "slow",
+      "latencyMs": 800
+    },
+    "steps": [
+      {
+        "op": "http",
+        "method": "POST",
+        "path": "/api/orders",
+        "saveAs": "order"
+      },
+      {
+        "op": "parallel",
+        "count": 5,
+        "step": {
+          "op": "http",
+          "method": "POST",
+          "path": "/api/pay",
+          "body": {
+            "orderId": "$order.id"
+          }
+        }
+      }
+    ],
+    "assertions": [
+      {
+        "id": "a1",
+        "type": "db_count",
+        "table": "charges",
+        "where": {
+          "orderId": "$order.id"
+        },
+        "equals": 1
+      }
+    ],
+    "rationale": "PR removed the payment lock; retries are untested",
+    "sourceRefs": [
+      "jira:PAY-12#ac1",
+      "greptile:c_8812"
+    ]
+  },
+  {
+    "id": "sc_double_click_pay",
+    "objective": "Double-clicking Pay shows one paid order",
+    "origin": "planner",
+    "priority": "P1",
+    "fixture": "cart_one_item",
+    "knobs": {
+      "provider": "slow",
+      "latencyMs": 800
+    },
+    "steps": [
+      {
+        "op": "ui",
+        "action": "goto",
+        "target": "/checkout"
+      },
+      {
+        "op": "ui",
+        "action": "dblclick",
+        "target": "payButton"
+      },
+      {
+        "op": "wait",
+        "ms": 1500
+      }
+    ],
+    "assertions": [
+      {
+        "id": "a1",
+        "type": "ui_text",
+        "selector": "status",
+        "contains": "paid"
+      },
+      {
+        "id": "a2",
+        "type": "db_count",
+        "table": "charges",
+        "where": {},
+        "equals": 1
+      }
+    ],
+    "rationale": "Same race through the real UI, for the trace",
+    "sourceRefs": [
+      "jira:PAY-12#ac1",
+      "greptile:c_8812"
+    ]
+  }
+]
