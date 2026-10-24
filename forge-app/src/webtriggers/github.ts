@@ -7,7 +7,8 @@ import { header, respond } from "../lib/http";
 const ingest = new Queue({ key: "ingest" });
 
 function validSignature(req: WebTriggerRequest) {
-  const secret = process.env.GITHUB_WEBHOOK_SECRET ?? "";
+  const secret = process.env.GITHUB_WEBHOOK_SECRET;
+  if (!secret) return false;
   const sig = header(req.headers, "x-hub-signature-256") ?? "";
   const want = "sha256=" + createHmac("sha256", secret).update(req.body).digest("hex");
   return sig.length === want.length && timingSafeEqual(Buffer.from(sig), Buffer.from(want));

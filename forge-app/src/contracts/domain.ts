@@ -9,7 +9,7 @@ import {
   Route,
   SessionStatus,
   Severity,
-} from "./enums.js";
+} from "./enums";
 
 export const Session = z.object({
   id: z.string(),
