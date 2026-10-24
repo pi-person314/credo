@@ -5,6 +5,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { Env, KnobsRequest, viewPath, type LiveFrame } from "@pr-agent/contracts";
 import { signSessionToken, verifySessionToken } from "@pr-agent/contracts/token";
 import type { AgentFrame } from "../executor/browser.js";
+import { toPlaywrightSpec } from "../export/playwright.js";
 import type { Runtime } from "../runtime.js";
 import { viewPage } from "./page.js";
 
@@ -37,6 +38,24 @@ export async function viewRoutes(app: FastifyInstance, rt: Runtime) {
   app.get<{ Params: { id: string } }>("/sessions/:id/view-url", async (req) => {
     const t = signSessionToken(cfg.token, req.params.id);
     return { url: `${cfg.publicUrl}${viewPath(req.params.id, t)}`, token: t };
+  });
+
+  // P1: a scenario as a standalone Playwright test. x-token for Forge, ?t= for links in the panel/view.
+  const spec = (id: string, scenarioId: string, reply: FastifyReply) => {
+    const s = orchestrator.get(id);
+    const sc = s.scenarios.find((x) => x.id === scenarioId);
+    if (!sc) return reply.code(404).send({ error: `unknown scenario ${scenarioId}` });
+    return reply
+      .type("text/plain; charset=utf-8")
+      .header("content-disposition", `attachment; filename="${sc.id}.spec.ts"`)
+      .send(toPlaywrightSpec(sc, s.context.manifest));
+  };
+  app.get<{ Params: { id: string; scenarioId: string } }>("/sessions/:id/scenarios/:scenarioId/spec", async (req, reply) =>
+    spec(req.params.id, req.params.scenarioId, reply),
+  );
+  app.get<{ Params: { id: string; scenarioId: string }; Querystring: { t?: string } }>("/view/:id/spec/:scenarioId", async (req, reply) => {
+    if (!ok(req.params.id, req.query.t)) return deny(reply);
+    return spec(req.params.id, req.params.scenarioId.replace(/\.spec\.ts$/, ""), reply);
   });
 
   app.get<{ Params: { id: string }; Querystring: { t?: string } }>("/view/:id", async (req, reply) => {
