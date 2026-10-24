@@ -5,6 +5,7 @@ import type { Route } from "@forge/api";
 import type { Actor, AuditEntry, Diff, EventType, Recommendation, Report, Run, Scenario, Session } from "../contracts/index";
 import { bugAdf, notTested, reportAdf, VERDICT_LABEL, type Evidence } from "./adf";
 import { hasGithubToken, postPrComment, setCommitStatus, updatePrComment, type StatusState } from "./github-write";
+import { signSessionToken } from "../contracts/token";
 import { appendAudit, appendEvents, keys } from "./store";
 
 // Every write the agent makes in Jira or GitHub. Each one lands in the audit log and the timeline.
@@ -199,10 +200,13 @@ async function linkTypeName() {
   return (res.issueLinkTypes.find((t) => t.name.toLowerCase() === "relates") ?? res.issueLinkTypes[0])?.name;
 }
 
-// Artifacts are served by the runner at /artifacts/<sessionId>/<path>.
+// Artifacts are served by the runner at /artifacts/<sessionId>/<path>?t=<signed token>.
+// Bug links outlive the panel's 12 h view token, so these get a longer TTL.
+const EVIDENCE_TOKEN_TTL_SEC = 30 * 24 * 60 * 60;
 function artifactUrl(sessionId: string, path: string) {
   const rel = path.startsWith(`${sessionId}/`) ? path : `${sessionId}/${path}`;
-  return `${(process.env.RUNNER_URL ?? "").replace(/\/+$/, "")}/artifacts/${rel}`;
+  const t = signSessionToken(process.env.RUNNER_TOKEN ?? "", sessionId, EVIDENCE_TOKEN_TTL_SEC);
+  return `${(process.env.RUNNER_URL ?? "").replace(/\/+$/, "")}/artifacts/${rel}?t=${encodeURIComponent(t)}`;
 }
 
 function evidenceFor(session: Session, runs: Run[]): Evidence[] {
