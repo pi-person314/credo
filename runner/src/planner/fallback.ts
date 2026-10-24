@@ -4,7 +4,7 @@ import { Scenario, acRef, type AppManifest } from "@pr-agent/contracts";
 
 const FIXTURES = fileURLToPath(new URL("../../../mocks/fixtures/scenarios.json", import.meta.url));
 
-/** Points "jira:PAY-12#acN" refs at the session's issue. */
+/** Points "jira:PAY-5#acN" refs at the session's issue. */
 const retarget = (s: Scenario, issueKey: string): Scenario => ({
   ...s,
   sourceRefs: s.sourceRefs.map((r) => r.replace(/^jira:[A-Z][A-Z0-9]+-\d+#/, `jira:${issueKey}#`)),

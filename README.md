@@ -24,6 +24,7 @@ Full spec: [docs/SPEC.md](docs/SPEC.md) · Setup, secrets and accounts: [docs/SE
 
 ## Changelog
 
+- **Demo ticket is PAY-5** (demo data): the ticket lives on the demo site one-atlas-fdzb as PAY-5 (Jira numbers new projects from 1), with the reworded AC3 and a link to the Confluence page "Payments retry spec" (space PAY). The fixture, canned scenarios, docs and tests now say PAY-5, and the bug PR's title starts with `PAY-5:`.
 - **AC3 reworded** (demo data): PAY-12's third acceptance criterion now matches checkout-demo: "A provider timeout marks the order payment_failed and creates no charge" (was "leaves the order pending", which failed on base and PR alike). Same change in the fixture, its Confluence excerpt, and docs/SETUP.md; the Jira ticket is edited by hand.
 - **GITHUB_TOKEN without VM access** (infra): the deploy workflow copies the repo secret `VM_GITHUB_TOKEN` into the VM's `.env` (over stdin) and recreates the runner when it changed.
 - **VM smoke test** (infra): `infra/smoke.sh` runs the demo session (checkout-demo PR #1) on the VM against the local runner and prints its events and diffs; the RUNNER_TOKEN never leaves the VM. From GitHub: Actions → deploy → Run workflow with `smoke` (add `probe_only` to skip the redeploy, `keep` to leave the sandboxes up for the live view).

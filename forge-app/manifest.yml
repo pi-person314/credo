@@ -64,7 +64,7 @@ modules:
       actionVerb: GET
       description: Read-only. Verdict, acceptance-criteria coverage, scenario results and open risks for an issue.
       inputs:
-        issueKey: { title: Issue key, type: string, required: true, description: The Jira issue key, e.g. PAY-12. }
+        issueKey: { title: Issue key, type: string, required: true, description: The Jira issue key, e.g. PAY-5. }
     - key: ask-test
       name: Ask for a test
       function: rovoAskTest

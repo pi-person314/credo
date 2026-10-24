@@ -131,7 +131,7 @@ Rules:
 
 Errors or timeouts → `INCONCLUSIVE`, never a pass.
 
-Coverage per acceptance criterion (scenarios point at it with `sourceRefs: ["jira:PAY-12#ac1"]`):
+Coverage per acceptance criterion (scenarios point at it with `sourceRefs: ["jira:PAY-5#ac1"]`):
 - `FAILED` if any linked scenario is a `NEW_REGRESSION` or `EXISTING_FAILURE`.
 - `INCONCLUSIVE` if any is `FLAKY` / `INCONCLUSIVE`.
 - `VERIFIED` if at least one ran and all passed.
@@ -177,7 +177,7 @@ ProviderMode   = ok | slow | timeout | error
     { "id": "a1", "type": "db_count", "table": "charges", "where": { "orderId": "$order.id" }, "equals": 1 }
   ],
   "rationale": "PR removed the payment lock; retries are untested",
-  "sourceRefs": ["jira:PAY-12#ac1", "greptile:c_8812"]
+  "sourceRefs": ["jira:PAY-5#ac1", "greptile:c_8812"]
 }
 ```
 Step ops: `http`, `parallel`, `ui` (`goto`, `click`, `dblclick`, `fill`), `wait`. Assertions: `db_count`, `http_status`, `json_path`, `ui_text`.
@@ -263,7 +263,7 @@ pr-agent/
 
 **Person A: Forge app.** Manifest + scopes + external fetch permissions, GitHub web trigger + queue consumer, Jira / Confluence / GitHub reads, KVS, events web trigger, issue panel (all sections), Rovo agent + actions, report + coverage, Jira comment / Bug / guarded transition, GitHub comment + status, audit log, live-view embed spike, `runner-mock`.
 
-**Person B: runner + sandboxes.** Demo app + bug PR + PAY-12 ticket, Azure VM + compose + Caddy, sandbox manager, preview proxy, knobs + reset, executor, verifier, Droid planner (pipeline + asks), live view page + stream, artifacts with signed links, runner CLI.
+**Person B: runner + sandboxes.** Demo app + bug PR + PAY-5 ticket, Azure VM + compose + Caddy, sandbox manager, preview proxy, knobs + reset, executor, verifier, Droid planner (pipeline + asks), live view page + stream, artifacts with signed links, runner CLI.
 
 Mocks so nobody waits:
 - A: `mocks/runner-mock` takes `POST /sessions` and posts canned events to the Forge web trigger (works with `forge tunnel`).
@@ -271,7 +271,7 @@ Mocks so nobody waits:
 
 ## 11. Demo video (3 minutes max)
 
-1. **0:00** The PAY-12 ticket in Jira, with 3 acceptance criteria. Open a PR that "simplifies" retries.
+1. **0:00** The PAY-5 ticket in Jira, with 3 acceptance criteria. Open a PR that "simplifies" retries.
 2. **0:20** The PR Confidence panel lights up: reading the ticket, the Confluence spec, and Greptile's note. Sandboxes building.
 3. **0:45** Plan: 3 scenarios, each linked to an acceptance criterion.
 4. **1:05** Watch the agent: live browser on base and PR. Result: 1 charge vs 2. AC1 goes `FAILED`. Verdict `BLOCKING_REGRESSION`.
@@ -294,7 +294,7 @@ The bug must reproduce 10/10: fake provider with fixed latency, 5 parallel calls
 - [ ] Node 22 or 24. `npm i -g @forge/cli@latest` (v14+). API token with Forge scopes → `forge login`.
 - [ ] `forge site provision` → demo site. Confirm Rovo is on for the site.
 - [ ] `cd forge-app && forge register && forge deploy && forge install --demo-site --product jira` (add `confluence` too).
-- [ ] Jira project PAY, issue PAY-12 with acceptance criteria. Confluence page "Payments retry spec" linked from it.
+- [ ] Jira project PAY, issue PAY-5 with acceptance criteria. Confluence page "Payments retry spec" linked from it.
 - [ ] GitHub repo for the demo app, test PR, webhook pointing at the Forge web trigger URL, PAT stored as a Forge encrypted variable.
 - [ ] Greptile installed on the demo repo.
 - [ ] Factory account + Droid auth; confirm credits.

@@ -3,12 +3,12 @@
     "id": "ses_demo",
     "repo": "pi-person314/checkout-demo",
     "prNumber": 1,
-    "title": "PAY-12: Simplify payment retries",
+    "title": "PAY-5: Simplify payment retries",
     "baseSha": "a2e141557298278c0d0c7eb9c7dcf4ed16cded9f",
     "headSha": "57be545cef3967229f10007f2ec4cfdbf3238eef",
     "status": "PLANNING",
     "createdAt": "2026-10-24T12:00:00.000Z",
-    "issueKey": "PAY-12",
+    "issueKey": "PAY-5",
     "prUrl": "https://github.com/pi-person314/checkout-demo/pull/1"
   },
   "prBody": "Removes the retry lock to simplify the payment flow.",
@@ -21,7 +21,7 @@
     }
   ],
   "jira": {
-    "key": "PAY-12",
+    "key": "PAY-5",
     "summary": "Simplify payment retry logic",
     "description": "Retry code is hard to follow. Simplify it without changing behavior.",
     "acceptanceCriteria": [
