@@ -254,3 +254,61 @@ export async function fileRegressionBug(session: Session, scenario: Scenario, di
   await emit(session, "agent", "bug.filed", true, `Filed ${key} for ${scenario.id}`, { key, scenarioId: scenario.id });
   return key;
 }
+
+// ---------- Guarded transition ----------
+
+const TARGET_STATUS = "in progress";
+
+/** The issue's transition into "In Progress", matched on the transition or its target status name. */
+async function findTransition(issueKey: string): Promise<Transition | undefined> {
+  const res = await jira<{ transitions: { id: string; name: string; to?: { name?: string } }[] }>(
+    "GET",
+    route`/rest/api/3/issue/${issueKey}/transitions`,
+  );
+  const t = res.transitions.find((x) => x.to?.name?.toLowerCase() === TARGET_STATUS || x.name.toLowerCase() === TARGET_STATUS);
+  return t ? { id: t.id, name: t.to?.name ?? t.name } : undefined;
+}
+
+/**
+ * Propose moving the issue back to In Progress. Changes nothing in Jira: it records the proposal so the
+ * panel can show the button. Returns the transition, or undefined if the workflow has none.
+ */
+export async function proposeTransition(session: Session) {
+  const prior = await kvs.get<Transition>(pubKeys.transition(session.id));
+  if (prior) return prior;
+  let t: Transition | undefined;
+  try {
+    t = await findTransition(session.issueKey);
+  } catch (e) {
+    console.log(`transitions for ${session.issueKey} failed: ${errText(e)}`);
+  }
+  if (!t) return undefined;
+  await kvs.set(pubKeys.transition(session.id), t);
+  const reason = `${session.recommendation ?? "regression"}: move back to ${t.name} needs a human OK`;
+  await audit(session, { action: "jira.transition", target: session.issueKey, inputs: { transitionId: t.id }, reason, result: "proposed" });
+  await emit(session, "agent", "transition.proposed", true, `Proposed moving ${session.issueKey} to ${t.name}`, t);
+  return t;
+}
+
+/** Perform the transition. Only call from a human action; `actor` is their accountId. */
+export async function approveTransition(session: Session, actor: string) {
+  if (!actor) throw new Error("approveTransition needs the approving user's accountId");
+  let t: Transition | undefined;
+  try {
+    // Look it up again: the issue may have moved since the proposal.
+    t = await findTransition(session.issueKey);
+    if (!t) throw new Error(`no transition to In Progress from the current status`);
+    await jira("POST", route`/rest/api/3/issue/${session.issueKey}/transitions`, { transition: { id: t.id } });
+  } catch (e) {
+    await audit(session, { action: "jira.transition", target: session.issueKey, approvedBy: actor, inputs: { transitionId: t?.id }, reason: errText(e), result: "failed" });
+    await emit(session, "reviewer", "transition.approved", false, `Transition failed: ${errText(e)}`);
+    return { ok: false, error: errText(e) };
+  }
+  await kvs.delete(pubKeys.transition(session.id));
+  await audit(session, { action: "jira.transition", target: session.issueKey, approvedBy: actor, inputs: { transitionId: t.id }, reason: `approved move to ${t.name}`, result: "ok" });
+  await emit(session, "reviewer", "transition.approved", true, `${session.issueKey} moved to ${t.name}`, t);
+  return { ok: true, transition: t };
+}
+
+/** The open proposal, if any, so the panel knows whether to show "Move back to In Progress". */
+export const pendingTransition = (sessionId: string) => kvs.get<Transition>(pubKeys.transition(sessionId));
