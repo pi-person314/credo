@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import Resolver from "@forge/resolver";
+import type { AsyncEvent } from "@forge/events";
 import { z } from "zod";
 import {
   AppManifest,
@@ -162,15 +162,12 @@ export async function ingest(raw: unknown) {
   }
 }
 
-const resolver = new Resolver();
-
-resolver.define("ingest", async ({ payload }) => {
+/** Queue consumer (@forge/events v2+ function consumer). The job is in event.body. */
+export async function ingestConsumer(event: AsyncEvent) {
   try {
-    await ingest(payload);
+    await ingest(event.body);
   } catch (e) {
     // KVS failures land here. Log and drop: a retry would create a second session.
     console.error("ingest failed", errMsg(e));
   }
-});
-
-export const ingestConsumer = resolver.getDefinitions();
+}

@@ -16,15 +16,11 @@ modules:
   consumer:
     - key: ingest-consumer
       queue: ingest
-      resolver:
-        function: ingestConsumer
-        method: ingest
+      function: ingestConsumer
     # Builds and publishes the report after session.complete / ask.complete (pushed by runner-events).
     - key: report-consumer
       queue: report
-      resolver:
-        function: reportConsumer
-        method: report
+      function: reportConsumer
 
   jira:issuePanel:
     - key: pr-confidence-panel

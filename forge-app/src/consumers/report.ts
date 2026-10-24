@@ -1,13 +1,11 @@
-import Resolver from "@forge/resolver";
+import type { AsyncEvent } from "@forge/events";
 import { onSessionComplete } from "../lib/report";
 
 // Queue consumer for jobs pushed by the runner-events web trigger on session.complete / ask.complete.
 // Building and publishing the report is slow (Jira, GitHub), so it runs here and the trigger answers the runner fast.
 
-const resolver = new Resolver();
-
-resolver.define("report", async ({ payload }) => {
-  const sessionId = (payload as { sessionId?: unknown } | undefined)?.sessionId;
+export async function reportConsumer(event: AsyncEvent) {
+  const sessionId = (event.body as { sessionId?: unknown } | undefined)?.sessionId;
   if (typeof sessionId !== "string" || !sessionId) return void console.error("report: bad job");
   try {
     await onSessionComplete(sessionId);
@@ -15,6 +13,4 @@ resolver.define("report", async ({ payload }) => {
     // Log and drop: a retry would publish again.
     console.error(`report for ${sessionId} failed`, err);
   }
-});
-
-export const reportConsumer = resolver.getDefinitions();
+}
