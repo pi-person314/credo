@@ -13,7 +13,7 @@ const keyOf = (p: Payload) => (p.issueKey ?? p.context?.jira?.issueKey ?? "").tr
 /** Session for the issue, or the reply Rovo should give when there is none. */
 async function session(p: Payload) {
   const issueKey = keyOf(p);
-  if (!issueKey) return { issueKey, error: "Which Jira issue? Give the key, e.g. PAY-12." };
+  if (!issueKey) return { issueKey, error: "Which Jira issue? Give the key, e.g. PAY-5." };
   const s = await sessionForIssue(issueKey);
   return s ? { issueKey, id: s.id } : { issueKey, error: `No PR verification found for ${issueKey}.` };
 }

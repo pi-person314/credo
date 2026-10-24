@@ -59,7 +59,7 @@ describe("coverage", () => {
   const acs = ["never charged twice", "retry after error works", "timeout fails without a charge"];
 
   it("maps diffs onto acceptance criteria", () => {
-    const out = coverage("PAY-12", acs, scenarios, [
+    const out = coverage("PAY-5", acs, scenarios, [
       d("sc_single_pay", "UNCHANGED_PASS"),
       d("sc_concurrent_retry", "NEW_REGRESSION"),
       d("sc_double_click_pay", "UNCHANGED_PASS"),
@@ -70,8 +70,8 @@ describe("coverage", () => {
 });
 
 describe("findJiraKey", () => {
-  it("reads the title first", () => expect(findJiraKey("PAY-12: fix", "feat/OPS-3")).toBe("PAY-12"));
-  it("falls back to branch", () => expect(findJiraKey("fix retries", "feat/PAY-12-retry")).toBe("PAY-12"));
+  it("reads the title first", () => expect(findJiraKey("PAY-5: fix", "feat/OPS-3")).toBe("PAY-5"));
+  it("falls back to branch", () => expect(findJiraKey("fix retries", "feat/PAY-5-retry")).toBe("PAY-5"));
   it("returns undefined", () => expect(findJiraKey("fix", "main")).toBeUndefined());
 });
 

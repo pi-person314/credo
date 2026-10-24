@@ -61,7 +61,7 @@ app.post<{ Params: { id: string } }>("/sessions/:id/ask", async (req, reply) => 
   const id = req.params.id;
   const sb = sessions.get(id);
   const { askId, prompt } = parsed.data;
-  background(`ask ${askId}`, runAsk(emitFor(id), wait, id, sb?.shas ?? { base: "base", head: "head" }, askId, prompt, sb?.issueKey ?? "PAY-12"));
+  background(`ask ${askId}`, runAsk(emitFor(id), wait, id, sb?.shas ?? { base: "base", head: "head" }, askId, prompt, sb?.issueKey ?? "PAY-5"));
   return reply.code(202).send({ ok: true });
 });
 

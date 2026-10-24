@@ -53,7 +53,7 @@ describe("Planner", () => {
     const r = await new Planner(fake("nope", "still nope")).plan(context);
     expect(r.source).toBe("canned");
     expect(r.scenarios).toHaveLength(3);
-    expect(r.scenarios[1]!.sourceRefs).toContain("jira:PAY-12#ac1");
+    expect(r.scenarios[1]!.sourceRefs).toContain("jira:PAY-5#ac1");
   });
   it("answers asks with a template when the planner is off", async () => {
     const r = await new Planner(off).ask(context, "What if the provider times out and the user retries?", []);

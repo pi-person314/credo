@@ -22,7 +22,7 @@ describe("canned session", () => {
 
   it("ask ends with ask.complete", async () => {
     const events: Event[] = [];
-    await runAsk(memoryEmitter("ses_t", events), waiter(0), "ses_t", shas, "ask_1", "retry after timeout", "PAY-12");
+    await runAsk(memoryEmitter("ses_t", events), waiter(0), "ses_t", shas, "ask_1", "retry after timeout", "PAY-5");
     expect(events.at(-1)?.data).toEqual({ askId: "ask_1", scenarioIds: ["sc_ask_ask_1"] });
   });
 });

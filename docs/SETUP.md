@@ -83,13 +83,13 @@ Settings → Webhooks → Add webhook:
 
 ## Jira data for the demo
 
-On the demo site:
-- Project **PAY**, issue **PAY-12** "Simplify payment retry logic", with an **Acceptance criteria** section:
+On the demo site (one-atlas-fdzb.atlassian.net; the ticket is PAY-5 because Jira numbers a new project from 1, PAY-1 to PAY-4 are filler):
+- Project **PAY**, issue **PAY-5** "Simplify payment retry logic", with an **Acceptance criteria** section:
   1. A customer is never charged twice for one order
   2. Retries after a provider error succeed
   3. A provider timeout marks the order payment_failed and creates no charge
-- A Confluence page **Payments retry spec**, linked from PAY-12 (Link → Confluence page).
-- The bug PR's title starts with `PAY-12:` so the agent finds the ticket.
+- A Confluence page **Payments retry spec**, linked from PAY-5 (Link → Confluence page).
+- The bug PR's title starts with `PAY-5:` so the agent finds the ticket.
 
 ## Order of setup
 
@@ -97,4 +97,4 @@ On the demo site:
 2. A: `forge site provision`, invite B, `forge register`, `forge deploy`, `forge install --demo-site --product jira`, `forge webtrigger`.
 3. B: demo repo + Greptile + Factory key. Fill `.env`, then start the runner with the tunnel.
 4. A: set the Forge variables with the tunnel URL and redeploy. Add the GitHub webhook to the demo repo.
-5. Open a PR titled `PAY-12: ...` on the demo repo and watch the panel on PAY-12.
+5. Open a PR titled `PAY-5: ...` on the demo repo and watch the panel on PAY-5.
