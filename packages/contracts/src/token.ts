@@ -1,0 +1,26 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
+
+// Signed ?t= token for the runner's browser-facing routes (/view, /preview, /live, /artifacts).
+// Forge's getViewUrl signs it with RUNNER_TOKEN; the runner checks it. The secret never reaches the browser.
+// Not exported from index.ts (uses node:crypto): import "../contracts/token" (Forge) or "@pr-agent/contracts/token".
+//
+// Format: "<expiresAtUnixSeconds>.<base64url HMAC-SHA256(secret, "<sessionId>.<expiresAt>")>"
+
+export const SESSION_TOKEN_TTL_SEC = 12 * 60 * 60;
+
+const mac = (secret: string, sessionId: string, exp: number) =>
+  createHmac("sha256", secret).update(`${sessionId}.${exp}`).digest("base64url");
+
+export function signSessionToken(secret: string, sessionId: string, ttlSec = SESSION_TOKEN_TTL_SEC, now = Date.now()): string {
+  const exp = Math.floor(now / 1000) + ttlSec;
+  return `${exp}.${mac(secret, sessionId, exp)}`;
+}
+
+export function verifySessionToken(secret: string, sessionId: string, token: string | undefined, now = Date.now()): boolean {
+  const [expRaw, sig] = (token ?? "").split(".");
+  const exp = Number(expRaw);
+  if (!sig || !Number.isInteger(exp) || exp * 1000 < now) return false;
+  const want = Buffer.from(mac(secret, sessionId, exp));
+  const got = Buffer.from(sig);
+  return want.length === got.length && timingSafeEqual(want, got);
+}
