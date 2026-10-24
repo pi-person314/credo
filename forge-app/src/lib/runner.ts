@@ -3,7 +3,7 @@ import { TOKEN_HEADER, type Context, type Knobs } from "../contracts/index";
 
 // Every runner call returns fast; results come back as Events on the runner-events web trigger.
 // RUNNER_URL and RUNNER_TOKEN are Forge variables: forge variables set --encrypt RUNNER_TOKEN <value>
-const base = () => process.env.RUNNER_URL ?? "";
+const base = () => (process.env.RUNNER_URL ?? "").replace(/\/+$/, "");
 const headers = () => ({ "content-type": "application/json", [TOKEN_HEADER]: process.env.RUNNER_TOKEN ?? "" });
 
 async function call(method: string, path: string, body?: unknown) {

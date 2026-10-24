@@ -202,7 +202,7 @@ async function linkTypeName() {
 // Artifacts are served by the runner at /artifacts/<sessionId>/<path>.
 function artifactUrl(sessionId: string, path: string) {
   const rel = path.startsWith(`${sessionId}/`) ? path : `${sessionId}/${path}`;
-  return `${process.env.RUNNER_URL ?? ""}/artifacts/${rel}`;
+  return `${(process.env.RUNNER_URL ?? "").replace(/\/+$/, "")}/artifacts/${rel}`;
 }
 
 function evidenceFor(session: Session, runs: Run[]): Evidence[] {

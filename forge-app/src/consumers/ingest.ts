@@ -16,7 +16,7 @@ import { readLinkedPages } from "../lib/confluence";
 import { readGreptileFindings, readManifest, readPrFiles } from "../lib/github";
 import { readIssue, readRemoteLinks } from "../lib/jira";
 import { runner } from "../lib/runner";
-import { appendEvents, saveSession, sessionForIssue } from "../lib/store";
+import { appendEvents, saveContext, saveSession, sessionForIssue } from "../lib/store";
 
 // Queue consumer for jobs pushed by the github web trigger.
 // Every source is best effort: a failed read becomes a "fail" event, not a failed session.
@@ -154,6 +154,8 @@ export async function ingest(raw: unknown) {
       manifest: pr.manifest,
       priorScenarioIds: [],
     });
+    // The report reads findings, acceptance criteria and the issue from context:<id>.
+    await saveContext(context);
     await runner.start(context);
   } catch (e) {
     await failSession(session, `Could not start the runner: ${errMsg(e)}`);
