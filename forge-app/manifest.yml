@@ -16,9 +16,11 @@ modules:
   consumer:
     - key: ingest-consumer
       queue: ingest
-      resolver:
-        function: ingestConsumer
-        method: ingest
+      function: ingestConsumer
+    # Builds and publishes the report after session.complete / ask.complete (pushed by runner-events).
+    - key: report-consumer
+      queue: report
+      function: reportConsumer
 
   jira:issuePanel:
     - key: pr-confidence-panel
@@ -28,8 +30,8 @@ modules:
       render: native
       title: PR Confidence
       icon: https://developer.atlassian.com/platform/forge/images/icons/issue-panel-icon.svg
-      # TODO(A, spike H0-2): live view embed. Try a Custom UI resource rendered with UI Kit <Frame>,
-      # plus permissions.external.frames below. Fallback: LinkButton that opens getViewUrl() in a new tab.
+      # Live view embed: the panel renders <Frame resource="live-view">, which iframes the runner's
+      # signed view URL (permissions.external.frames). Fallback: the "Open live sandbox" LinkButton.
 
   rovo:agent:
     - key: pr-confidence-agent
@@ -98,6 +100,8 @@ modules:
       handler: index.runnerEvents
     - key: ingestConsumer
       handler: index.ingestConsumer
+    - key: reportConsumer
+      handler: index.reportConsumer
     - key: resolver
       handler: index.resolver
     - key: rovoGetVerification
@@ -112,6 +116,8 @@ modules:
 resources:
   - key: panel
     path: src/frontend/index.tsx
+  - key: live-view
+    path: src/frontend/live-view
 
 permissions:
   scopes:
@@ -119,14 +125,15 @@ permissions:
     - write:jira-work
     - read:jira-user
     - read:confluence-content.summary
+    - read:page:confluence # Confluence v2 GET /wiki/api/v2/pages/{id} (ingest)
     - storage:app
   external:
     fetch:
       backend:
         - api.github.com
         - pr-agent-saksham-20261024.westus2.cloudapp.azure.com # the runner VM
-    # frames:
-    #   - pr-agent-saksham-20261024.westus2.cloudapp.azure.com
+    frames:
+      - pr-agent-saksham-20261024.westus2.cloudapp.azure.com # live view in the panel
 
 app:
   runtime:

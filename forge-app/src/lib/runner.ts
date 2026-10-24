@@ -3,11 +3,12 @@ import { TOKEN_HEADER, type Context, type Knobs } from "../contracts/index";
 
 // Every runner call returns fast; results come back as Events on the runner-events web trigger.
 // RUNNER_URL and RUNNER_TOKEN are Forge variables: forge variables set --encrypt RUNNER_TOKEN <value>
-const base = () => process.env.RUNNER_URL ?? "";
+const base = () => (process.env.RUNNER_URL ?? "").replace(/\/+$/, "");
 const headers = () => ({ "content-type": "application/json", [TOKEN_HEADER]: process.env.RUNNER_TOKEN ?? "" });
 
 async function call(method: string, path: string, body?: unknown) {
-  const res = await fetch(`${base()}${path}`, { method, headers: headers(), body: body ? JSON.stringify(body) : undefined });
+  // Fastify rejects an empty body sent as application/json (FST_ERR_CTP_EMPTY_JSON_BODY), so POSTs always carry one.
+  const res = await fetch(`${base()}${path}`, { method, headers: headers(), body: method === "GET" ? undefined : JSON.stringify(body ?? {}) });
   if (!res.ok) throw new Error(`runner ${method} ${path} -> ${res.status}`);
   return res.status === 202 ? undefined : res.json();
 }

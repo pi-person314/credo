@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Live sandbox</title>
+    <!-- Custom UI resource shown by UI Kit <Frame resource="live-view"> in the issue panel.
+         It only hosts the runner's /view page; the runner domain must be in permissions.external.frames. -->
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <p id="status">Loading live sandbox…</p>
+    <iframe id="view" title="Live sandbox" hidden></iframe>
+    <script src="./main.js"></script>
+  </body>
+</html>
