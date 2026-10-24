@@ -6,3 +6,4 @@ dist/
 data/
 playwright-report/
 test-results/
+.work/
