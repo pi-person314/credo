@@ -9,7 +9,7 @@ Everything shows up inside the Jira ticket:
 
 On a regression it files a linked Bug with repro steps. Workflow changes wait for a human's OK, and every write goes in an audit log.
 
-Full spec: [docs/SPEC.md](docs/SPEC.md)
+Full spec: [docs/SPEC.md](docs/SPEC.md) · Setup, secrets and accounts: [docs/SETUP.md](docs/SETUP.md)
 
 ## Status
 
@@ -20,10 +20,11 @@ Full spec: [docs/SPEC.md](docs/SPEC.md)
 | `mocks/runner-mock` | A | ✅ fake runner: full canned pipeline + asks, posts events to the Forge web trigger |
 | `runner` (orchestrator, planner, sandboxes, executor, verifier, live view) | B | 🟡 stub: `/health`, token check, event sinks, CLI |
 | `demo-app` | B | 🟡 `manifest.json` + requirements only |
-| `infra` (Azure VM, compose, Caddy) | B | 🟡 draft |
+| `infra` (compose: laptop + tunnel or Azure VM + Caddy) | B | 🟡 draft |
 
 ## Changelog
 
+- **Setup guide**: docs/SETUP.md (every env var, account and login), compose profiles to run the runner on a laptop through a Cloudflare tunnel or on a VM.
 - **Scaffold + contracts (Forge)**: pnpm workspace, shared zod contracts with tests, Forge app skeleton (web triggers, queue consumer, issue panel, Rovo agent + actions), contracts sync into the Forge app, runner stub, runner mock, compose + Caddy draft, CI.
 
 ## Layout
@@ -78,7 +79,7 @@ pnpm --filter @pr-agent/runner dev:cli --context ../mocks/fixtures/context.json 
 pnpm dev:runner                                                                  # API on :4100
 ```
 
-On the Azure VM: `cp .env.example .env`, fill it in, then `docker compose -f infra/compose.yml up -d --build`.
+Full runner with Docker: `cp .env.example .env`, fill it in, then `docker compose -f infra/compose.yml --profile tunnel up --build` on a laptop, or `--profile vm up -d --build` on a VM. See [docs/SETUP.md](docs/SETUP.md).
 
 ## How we work
 
