@@ -20,10 +20,11 @@ Full spec: [docs/SPEC.md](docs/SPEC.md) · Setup, secrets and accounts: [docs/SE
 | `mocks/runner-mock` | A | ✅ fake runner: full canned pipeline + asks, posts events to the Forge web trigger |
 | `runner` (orchestrator, planner, sandboxes, executor, verifier, live view) | B | 🟡 full pipeline + Runner API + dev:cli; demo bug NEW_REGRESSION 10/10; live view page |
 | `demo-app` | B | ✅ lives in [pi-person314/checkout-demo](https://github.com/pi-person314/checkout-demo); bug PR #1 |
-| `infra` (compose: laptop + tunnel or Azure VM + Caddy) | B | 🟡 draft |
+| `infra` (compose: laptop + tunnel or Azure VM + Caddy) | B | 🟡 runner image, compose (127.0.0.1:4100), edge Caddyfile, deploy script; not yet deployed (VM SSH pending) |
 
 ## Changelog
 
+- **Infra** (runner image + VM): image on Playwright 1.63 with Docker CLI/Compose, git and the Droid CLI; compose runs only the runner on `127.0.0.1:4100` in attach mode (joins each sandbox's internal network); `infra/edge/Caddyfile` for the VM's edge Caddy; `infra/deploy.sh` ships `git HEAD` over SSH and restarts the runner; CI builds the image.
 - **Live view** (runner): `/view/:id?t=` page for the Jira panel: Watch the agent (CDP screencast over `WS /live/:id/:env`) or Try it yourself (both apps through `/preview/:id/:env/<token>/`), knobs + reset for both, live charge/order counts, test table, activity feed. `/artifacts/:id/*?t=` serves evidence. `GET /sessions/:id/view-url` (x-token) returns a signed URL for Forge's `getViewUrl`.
 - **Orchestrator + Runner API + CLI** (runner): `POST /sessions` runs sandboxes → route → plan → run both → verify → follow-ups → `session.complete` in the background; asks queue behind it (and rebuild sandboxes after idle teardown); knobs/reset hit both; status; teardown; idle sweeper; orphan cleanup on start. Events go to the Forge web trigger in order with retries. `dev:cli` runs it all locally; `--scenarios … --repeat 10` is the 10/10 check (base 1 charge, PR 5, every time). `mocks/fixtures/context.json` now points at checkout-demo PR #1.
 - **Droid planner** (runner): prompts Factory Droid (`droid exec`, read-only) with the ticket, acceptance criteria, Confluence, findings, diff and manifest; validates the JSON against the Scenario schema and the manifest, retries once with the errors, falls back to canned scenarios (pipeline) or keyword templates (asks). Follow-ups: one round, up to 3, only after a surprise. Docs-only PRs route to STATIC_ONLY.
@@ -85,7 +86,9 @@ pnpm --filter @pr-agent/runner dev:cli --context ../mocks/fixtures/context.json 
 pnpm dev:runner                                                                  # API on :4100
 ```
 
-Full runner with Docker: `cp .env.example .env`, fill it in, then `docker compose -f infra/compose.yml --profile tunnel up --build` on a laptop, or `--profile vm up -d --build` on a VM. See [docs/SETUP.md](docs/SETUP.md).
+Full runner with Docker: `cp .env.example .env`, fill it in, then `docker compose -f infra/compose.yml --profile tunnel up --build` on a laptop. On the Azure VM: `VM_KEY=<key> infra/deploy.sh` (runner on 127.0.0.1:4100 behind the edge Caddy). See [docs/SETUP.md](docs/SETUP.md).
+
+Docker tests (real sandboxes, checkout-demo main vs PR #1): `DOCKER_TESTS=1 pnpm --filter @pr-agent/runner test`. The 10/10 check: `pnpm --filter @pr-agent/runner dev:cli --scenarios ../mocks/fixtures/scenarios.json --repeat 10`.
 
 ## How we work
 

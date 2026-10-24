@@ -31,3 +31,9 @@ jobs:
           cache-dependency-path: forge-app/package-lock.json
       - run: npm ci
       - run: npm run typecheck
+  runner-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f runner/Dockerfile -t pr-agent-runner:ci .
+      - run: docker run --rm pr-agent-runner:ci sh -c 'docker compose version && git --version && node -e "import(\"playwright-core\").then(() => console.log(\"ok\"))"'

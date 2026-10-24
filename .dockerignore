@@ -1,0 +1,7 @@
+**/node_modules
+**/.work
+.git
+.env
+forge-app
+**/dist
+**/*.log

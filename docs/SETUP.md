@@ -40,13 +40,24 @@ Set from `forge-app/`. `--encrypt` hides the value. Then run `forge deploy` agai
 
 | Name | What |
 |---|---|
-| `RUNNER_TOKEN` | Same value as the Forge variable |
+| `RUNNER_TOKEN` | Same value as the Forge variable. Also signs the `?t=` links (`/view`, `/live`, `/preview`, `/artifacts`) |
 | `EVENTS_URL` | The `runner-events` web trigger URL. Run `forge webtrigger` after `forge install` and pick `runner-events` |
-| `GITHUB_TOKEN` | PAT with read access to the demo repo, to clone base and head |
-| `FACTORY_API_KEY` | Factory Droid key for the planner (check Factory's docs for the exact variable their SDK reads) |
-| `ARTIFACTS_DIR` | Where traces and screenshots go. Default `/data/artifacts` |
+| `GITHUB_TOKEN` | PAT with Contents: read on the demo repo, to fetch base and head |
+| `FACTORY_API_KEY` | Factory Droid key for the planner. Without it the runner uses the canned scenarios and ask templates |
+| `PUBLIC_URL` | Public base URL of the runner (the VM's https URL or the tunnel URL); used in the signed view URL |
 | `SANDBOX_IDLE_TTL_MIN` | Minutes before idle sandboxes shut down. Default `30` |
-| `DOMAIN` | VM only, for Caddy HTTPS |
+| `DOMAIN` | Only for the compose `caddy` profile |
+
+Optional: `DROID_MODEL`, `SANDBOX_APP_SERVICE` (`app`), `SANDBOX_APP_PORT` (`3000`), `SANDBOX_HEALTH_PATH` (`/healthz`), `SANDBOX_CPUS` / `SANDBOX_MEMORY` per container, `SANDBOX_BUILD_TIMEOUT_SEC`.
+
+### Runner on the Azure VM
+
+The VM already runs an edge Caddy in `/opt/pr-agent/edge` on 80/443 (HTTPS for the VM's DNS name). The runner listens on `127.0.0.1:4100` only, and Caddy proxies to it (`infra/edge/Caddyfile`). Don't use the compose `caddy` profile there.
+
+1. Once, on the VM: `cp .env.example /opt/pr-agent/app/.env` and fill it in. `PUBLIC_URL=https://<vm dns name>`.
+2. From a machine with SSH access: `VM_KEY=<key> infra/deploy.sh`. It ships `git HEAD`, runs `docker compose -f infra/compose.yml up -d --build runner`, and waits for `/health`.
+3. Forge: `forge variables set RUNNER_URL https://<vm dns name>`, add the host to `permissions.external.fetch.backend` and `frames` in `manifest.yml`, then `forge deploy`.
+4. Live view link for the panel: Forge signs it with `signSessionToken(RUNNER_TOKEN, sessionId)` from `src/contracts/token.ts`, or calls `GET /sessions/:id/view-url` (x-token).
 
 ### GitHub webhook (on the demo repo)
 Settings → Webhooks → Add webhook:
