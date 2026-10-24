@@ -37,3 +37,5 @@ jobs:
       - uses: actions/checkout@v4
       - run: docker build -f runner/Dockerfile -t pr-agent-runner:ci .
       - run: docker run --rm pr-agent-runner:ci sh -c 'docker compose version && git --version && node -e "import(\"playwright-core\").then(() => console.log(\"ok\"))"'
+      - name: droid CLI (planner)
+        run: docker run --rm pr-agent-runner:ci sh -c 'droid --version && droid exec --help'

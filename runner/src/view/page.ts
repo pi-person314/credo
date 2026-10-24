@@ -75,6 +75,7 @@ tr:last-child td { border-bottom: 0; }
 .cls.UNCHANGED_PASS, .cls.IMPROVEMENT { background: var(--ok-bg); color: var(--ok); }
 .cls.FLAKY, .cls.INCONCLUSIVE, .cls.RUNNING { background: var(--warn-bg); color: var(--warn); }
 .refs { color: var(--muted); font-size: 12px; }
+.refs a { color: var(--accent); }
 .feed { max-height: 220px; overflow: auto; font-size: 12px; }
 .feed div { padding: 3px 10px; border-bottom: 1px solid var(--line); display: flex; gap: 8px; }
 .feed time { color: var(--muted); font-family: ui-monospace, Menlo, monospace; flex: none; }
@@ -209,7 +210,7 @@ function render(s) {
   const diffs = new Map(s.diffs.map((d) => [d.scenarioId, d]));
   $("tests").innerHTML = s.scenarios.length ? s.scenarios.map((sc) => {
     const d = diffs.get(sc.id);
-    return "<tr><td><div>" + text(sc.objective) + "</div><div class='refs'>" + text(sc.id) + (sc.origin !== "planner" ? " · " + text(sc.origin) : "") + " · " + text(sc.sourceRefs.join(" ")) + "</div></td>" +
+    return "<tr><td><div>" + text(sc.objective) + "</div><div class='refs'>" + text(sc.id) + (sc.origin !== "planner" ? " · " + text(sc.origin) : "") + " · " + text(sc.sourceRefs.join(" ")) + " · <a href='/view/" + encodeURIComponent(BOOT.id) + "/spec/" + encodeURIComponent(sc.id) + ".spec.ts" + q + "'>.spec.ts</a></div></td>" +
       "<td class='res " + (d ? d.base : "") + "'>" + (d ? d.base : "…") + "</td><td class='res " + (d ? d.head : "") + "'>" + (d ? d.head : "…") + "</td>" +
       "<td><span class='cls " + (d ? d.classification : "RUNNING") + "'>" + (d ? d.classification.replace(/_/g, " ") : "running") + "</span></td></tr>";
   }).join("") : "<tr><td colspan='4' class='refs'>No tests yet.</td></tr>";
