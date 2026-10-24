@@ -24,6 +24,7 @@ Full spec: [docs/SPEC.md](docs/SPEC.md) · Setup, secrets and accounts: [docs/SE
 
 ## Changelog
 
+- **Signed session token** (contracts): `signSessionToken` / `verifySessionToken` in `@pr-agent/contracts/token` for the runner's `?t=` links. Forge's `getViewUrl` signs with `RUNNER_TOKEN`.
 - **Setup guide**: docs/SETUP.md (every env var, account and login), compose profiles to run the runner on a laptop through a Cloudflare tunnel or on a VM.
 - **Scaffold + contracts (Forge)**: pnpm workspace, shared zod contracts with tests, Forge app skeleton (web triggers, queue consumer, issue panel, Rovo agent + actions), contracts sync into the Forge app, runner stub, runner mock, compose + Caddy draft, CI.
 
