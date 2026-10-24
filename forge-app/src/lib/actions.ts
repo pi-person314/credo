@@ -54,9 +54,9 @@ export type TransitionHook = (input: TransitionInput) => Promise<{ to?: string }
 let bugHook: BugHook | undefined;
 let transitionHook: TransitionHook | undefined;
 
-/** Creates the linked Jira Bug. Audit and events are handled here, not in the hook. */
+/** Creates the linked Jira Bug. The hook writes its own jira.bug audit entry and bug.filed event. */
 export const registerBugHook = (fn: BugHook) => void (bugHook = fn);
-/** Moves the issue back to In Progress. Audit and events are handled here, not in the hook. */
+/** Moves the issue back to In Progress. The hook writes its own audit entry and transition.approved event. */
 export const registerTransitionHook = (fn: TransitionHook) => void (transitionHook = fn);
 
 // ---------- helpers ----------
@@ -173,15 +173,11 @@ export async function fileBug(sessionId: string, scenarioId: string, approvedBy:
     if (prior) return { ok: true, key: prior.target };
     if (!bugHook) return fail("Bug filing is not wired yet");
 
-    const inputs = { scenarioId, classification: diff.classification };
+    // The hook (publish.fileRegressionBug) writes the jira.bug audit entry and the bug.filed event.
     try {
       const bug = await bugHook({ session, scenario, diff, runs: runs.filter((r) => r.scenarioId === scenarioId), context: await getContext(session.id), approvedBy });
-      await recordAudit(session, { action: "jira.bug", target: bug.key, approvedBy, inputs: { ...inputs, url: bug.url }, reason: `${diff.classification}: ${scenario.objective}`, result: "ok" });
-      await emit(session.id, "bug.filed", "ok", `Filed ${bug.key} for ${scenarioId}`, { scenarioId, ...bug });
       return { ok: true, ...bug };
     } catch (err) {
-      await recordAudit(session, { action: "jira.bug", target: session.issueKey, approvedBy, inputs, reason: errText(err), result: "failed" });
-      await emit(session.id, "bug.filed", "fail", `Bug for ${scenarioId} failed: ${errText(err)}`, { scenarioId });
       return fail(errText(err));
     }
   });
@@ -193,14 +189,11 @@ export async function approveTransition(sessionId: string, approvedBy: string | 
     const report = await getReport(session.id);
     if (report?.recommendation !== "BLOCKING_REGRESSION") return fail("only proposed when a regression blocks the PR");
     if (!transitionHook) return fail("transitions are not wired yet");
+    // The hook (publish.approveTransition) writes the jira.transition audit entry and the transition.approved event.
     try {
       const out = (await transitionHook({ session, report, context: await getContext(session.id), approvedBy })) ?? {};
-      await recordAudit(session, { action: "jira.transition", target: session.issueKey, approvedBy, inputs: out, reason: "Confirmed regression; moved back for a fix", result: "ok" });
-      await emit(session.id, "transition.approved", "ok", `Moved ${session.issueKey}${out.to ? ` to ${out.to}` : ""}`, out);
       return { ok: true, ...out };
     } catch (err) {
-      await recordAudit(session, { action: "jira.transition", target: session.issueKey, approvedBy, reason: errText(err), result: "failed" });
-      await emit(session.id, "transition.approved", "fail", `Transition failed: ${errText(err)}`);
       return fail(errText(err));
     }
   });
