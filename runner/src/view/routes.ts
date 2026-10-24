@@ -2,12 +2,26 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import { extname, resolve, sep } from "node:path";
 import websocket from "@fastify/websocket";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { z } from "zod";
 import { Env, KnobsRequest, viewPath, type LiveFrame } from "@pr-agent/contracts";
+import { VIEWPORT } from "../executor/browser.js";
 import { signSessionToken, verifySessionToken } from "@pr-agent/contracts/token";
 import type { AgentFrame } from "../executor/browser.js";
 import { toPlaywrightSpec } from "../export/playwright.js";
 import type { Runtime } from "../runtime.js";
 import { viewPage } from "./page.js";
+
+/** P1 take-over: the reviewer drives the agent's browser from the live view. x/y are 0..1 of the frame. */
+const Input = z.object({
+  env: z.enum(["base", "head", "both"]),
+  action: z.enum(["click", "dblclick", "type", "press", "scroll", "goto"]),
+  x: z.number().min(0).max(1).optional(),
+  y: z.number().min(0).max(1).optional(),
+  text: z.string().max(500).optional(),
+  key: z.enum(["Enter", "Tab", "Backspace", "Escape", "ArrowUp", "ArrowDown"]).optional(),
+  dy: z.number().min(-5000).max(5000).optional(),
+  path: z.string().startsWith("/").max(500).optional(),
+});
 
 const TYPES: Record<string, string> = {
   ".png": "image/png",
@@ -82,6 +96,8 @@ export async function viewRoutes(app: FastifyInstance, rt: Runtime) {
       sessionId: id,
       status: s?.status ?? "UNKNOWN",
       title: s?.context.session.title,
+      startPage: s?.context.manifest.pages.find((p) => !p.includes(":")) ?? "/",
+      busy: (s?.busy ?? 0) > 0,
       sandboxes: status,
       shas: s ? { base: s.context.session.baseSha, head: s.context.session.headSha } : undefined,
       knobs: s?.knobs,
@@ -102,6 +118,32 @@ export async function viewRoutes(app: FastifyInstance, rt: Runtime) {
   app.post<{ Params: { id: string }; Querystring: { t?: string } }>("/view/:id/reset", async (req, reply) => {
     if (!ok(req.params.id, req.query.t)) return deny(reply);
     await orchestrator.reset(req.params.id);
+    return { ok: true };
+  });
+
+  app.post<{ Params: { id: string }; Querystring: { t?: string } }>("/view/:id/input", async (req, reply) => {
+    const { id } = req.params;
+    if (!ok(id, req.query.t)) return deny(reply);
+    const input = Input.parse(req.body);
+    const s = orchestrator.get(id);
+    if (s.busy > 0) return reply.code(409).send({ error: "The agent is driving right now. Take over when it finishes." });
+    const envs = input.env === "both" ? (["base", "head"] as const) : ([input.env] as const);
+    await Promise.all(
+      envs.map(async (env) => {
+        const sb = sandboxes.healthy(id, env);
+        const page = await browser.page(id, env, sb.url);
+        await browser.setStep(id, env, { step: `reviewer: ${input.action}${input.text ? ` "${input.text}"` : input.path ? ` ${input.path}` : ""}` });
+        const x = (input.x ?? 0.5) * VIEWPORT.width;
+        const y = (input.y ?? 0.5) * VIEWPORT.height;
+        if (input.action === "click") await page.mouse.click(x, y);
+        else if (input.action === "dblclick") await page.mouse.dblclick(x, y);
+        else if (input.action === "type") await page.keyboard.type(input.text ?? "", { delay: 20 });
+        else if (input.action === "press") await page.keyboard.press(input.key ?? "Enter");
+        else if (input.action === "scroll") await page.mouse.wheel(0, input.dy ?? 300);
+        else if (input.action === "goto") await page.goto(input.path ?? "/", { timeout: 10_000 });
+      }),
+    );
+    sandboxes.touch(id);
     return { ok: true };
   });
 

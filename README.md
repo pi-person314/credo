@@ -24,6 +24,7 @@ Full spec: [docs/SPEC.md](docs/SPEC.md) · Setup, secrets and accounts: [docs/SE
 
 ## Changelog
 
+- **Take over the agent's browser** (runner, P1): in the live view, tick "Take over" and click, double-click, scroll or type on either screen (or both at once); `POST /view/:id/input?t=`. Refused while the agent is running a test.
 - **Export as .spec.ts** (runner, P1): any scenario as a standalone Playwright test (`GET /sessions/:id/scenarios/:scenarioId/spec` with x-token, or the `.spec.ts` link in the live view). Exported specs pass on base and fail on the PR for the race scenarios.
 - **Infra** (runner image + VM): image on Playwright 1.63 with Docker CLI/Compose, git and the Droid CLI; compose runs only the runner on `127.0.0.1:4100` in attach mode (joins each sandbox's internal network); `infra/edge/Caddyfile` for the VM's edge Caddy; `infra/deploy.sh` ships `git HEAD` over SSH and restarts the runner; CI builds the image.
 - **Live view** (runner): `/view/:id?t=` page for the Jira panel: Watch the agent (CDP screencast over `WS /live/:id/:env`) or Try it yourself (both apps through `/preview/:id/:env/<token>/`), knobs + reset for both, live charge/order counts, test table, activity feed. `/artifacts/:id/*?t=` serves evidence. `GET /sessions/:id/view-url` (x-token) returns a signed URL for Forge's `getViewUrl`.

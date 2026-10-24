@@ -33,6 +33,8 @@ export interface SessionState {
   error?: string;
   /** Pipeline and asks run one after another on the same sandboxes. */
   chain: Promise<unknown>;
+  /** > 0 while the pipeline or an ask is driving the sandboxes (the reviewer can't take over then). */
+  busy: number;
   emit: Emit;
 }
 
@@ -90,11 +92,12 @@ export class Orchestrator {
       knobs: DEFAULT_KNOBS,
       startedAt: Date.now(),
       chain: Promise.resolve(),
+      busy: 0,
       emit: emitter(this.d.sink, id),
     };
     this.sessions.set(id, state);
     state.chain = (prev ? prev.chain.catch(() => undefined) : Promise.resolve())
-      .then(() => this.pipeline(state))
+      .then(() => this.driving(state, () => this.pipeline(state)))
       .catch((err) => this.fail(state, err));
     return state;
   }
@@ -105,6 +108,15 @@ export class Orchestrator {
     while (chain !== this.sessions.get(id)?.chain) {
       chain = this.sessions.get(id)?.chain;
       await chain?.catch(() => undefined);
+    }
+  }
+
+  private async driving<T>(s: SessionState, fn: () => Promise<T>): Promise<T> {
+    s.busy++;
+    try {
+      return await fn();
+    } finally {
+      s.busy--;
     }
   }
 
@@ -219,7 +231,7 @@ export class Orchestrator {
     this.d.sandboxes.touch(id);
     s.chain = s.chain
       .catch(() => undefined)
-      .then(async () => {
+      .then(() => this.driving(s, async () => {
         await this.ensureSandboxes(s);
         await s.emit("planner", "planner.started", "start", `Planning ask: ${prompt}`, { askId });
         const priorIds = [...s.context.priorScenarioIds, ...s.scenarios.map((x) => x.id)];
@@ -231,7 +243,7 @@ export class Orchestrator {
           askId,
           scenarioIds: plan.scenarios.map((x) => x.id),
         });
-      })
+      }))
       .catch(async (err) => {
         await s.emit("planner", "ask.complete", "fail", `Ask failed: ${err instanceof Error ? err.message : err}`, { askId, scenarioIds: [] });
       });
