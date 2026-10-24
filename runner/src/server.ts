@@ -3,6 +3,7 @@ import { ZodError } from "zod";
 import { AskRunnerRequest, KnobsRequest, StartRequest, TOKEN_HEADER } from "@pr-agent/contracts";
 import { Conflict, NotFound } from "./orchestrator/orchestrator.js";
 import type { Runtime } from "./runtime.js";
+import { viewRoutes } from "./view/routes.js";
 
 // Browser-facing routes (embedded in Jira) carry a signed ?t= token instead of the header.
 const browserRoute = (url: string) => /^\/(health|view|preview|live|artifacts)(\/|$|\?)/.test(url);
@@ -57,6 +58,8 @@ export function buildServer(rt: Runtime, opts: { logger?: boolean } = {}): Fasti
     await orchestrator.teardown(req.params.id);
     return { ok: true };
   });
+
+  app.register(async (scope) => viewRoutes(scope, rt));
 
   return app;
 }

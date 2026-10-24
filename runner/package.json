@@ -11,6 +11,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@fastify/websocket": "10.0.1",
     "@pr-agent/contracts": "workspace:*",
     "fastify": "4.28.1",
     "playwright-core": "1.63.0",
