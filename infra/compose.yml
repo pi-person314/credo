@@ -1,33 +1,44 @@
 # Runner side only (the Forge app runs on Atlassian). Forge must reach the runner over public HTTPS.
 #
-#   Local laptop:  docker compose -f infra/compose.yml --profile tunnel up --build
+#   Azure VM (edge Caddy already on 80/443, see infra/edge/):
+#                  docker compose -f infra/compose.yml up -d --build runner
+#                  the runner listens on 127.0.0.1:4100 only; the edge Caddy proxies to it
+#   Laptop:        docker compose -f infra/compose.yml --profile tunnel up --build
 #                  then copy the https://<random>.trycloudflare.com URL from the cloudflared logs
-#   Azure VM:      docker compose -f infra/compose.yml --profile vm up -d --build   (needs DOMAIN)
+#   VM without an edge proxy: add --profile caddy (needs DOMAIN; takes 80/443)
 #
-# Sandboxes (sb-<session>-base / -head) are started by the runner at runtime, not listed here.
+# Sandboxes (sb-<session>-base / -head) are started by the runner at runtime on the host's Docker daemon,
+# not listed here.
 name: pr-agent
 
 services:
   runner:
     build: { context: .., dockerfile: runner/Dockerfile }
+    image: pr-agent-runner
+    container_name: pr-agent-runner
+    restart: unless-stopped
     env_file: ../.env
     environment:
+      WORK_DIR: /data/work
       ARTIFACTS_DIR: /data/artifacts
-    ports: ["4100:4100"]
+      SANDBOX_NETWORK_MODE: attach # the runner joins each sandbox's internal network
+      RUNNER_CONTAINER: pr-agent-runner
+    ports: ["127.0.0.1:4100:4100"]
     volumes:
-      - artifacts:/data/artifacts
-      - /var/run/docker.sock:/var/run/docker.sock   # starts sandboxes; only on a machine you trust
+      - runner-data:/data
+      - /var/run/docker.sock:/var/run/docker.sock # starts sandboxes; only on a machine you trust
+    shm_size: 1gb # Chromium
 
-  # Local: free Cloudflare quick tunnel, no account. The URL changes on every restart.
+  # Laptop: free Cloudflare quick tunnel, no account. The URL changes on every restart.
   tunnel:
     profiles: [tunnel]
     image: cloudflare/cloudflared:2024.12.2
     command: tunnel --no-autoupdate --url http://runner:4100
     depends_on: [runner]
 
-  # VM: HTTPS on a real DNS name.
+  # A VM with nothing else on 80/443: HTTPS on a real DNS name.
   caddy:
-    profiles: [vm]
+    profiles: [caddy]
     image: caddy:2.8
     ports: ["80:80", "443:443"]
     volumes:
@@ -38,5 +49,5 @@ services:
     depends_on: [runner]
 
 volumes:
-  artifacts:
+  runner-data:
   caddy_data:

@@ -1,0 +1,21 @@
+# Edge Caddy on the Azure VM (/opt/pr-agent/edge, host networking, Let's Encrypt).
+# It owns 80/443 and proxies everything to the runner, which listens on 127.0.0.1:4100 only.
+# Install: copy over /opt/pr-agent/edge/Caddyfile (keep a backup), then
+#   docker compose -p pr-agent-edge exec caddy caddy reload --config /etc/caddy/Caddyfile
+{$DOMAIN:pr-agent-saksham-20261024.westus2.cloudapp.azure.com} {
+	encode gzip
+
+	# Edge liveness, answered even when the runner is down.
+	handle /healthz {
+		respond "ok" 200
+	}
+
+	handle {
+		# API (Forge), live view page, preview proxy, WebSocket frames, artifacts.
+		reverse_proxy 127.0.0.1:4100 {
+			flush_interval -1
+		}
+		# The live view is embedded in Jira: never forbid framing.
+		header -X-Frame-Options
+	}
+}
