@@ -1,21 +1,28 @@
-import Fastify from "fastify";
-import { TOKEN_HEADER } from "@pr-agent/contracts";
+import { createRuntime } from "./runtime.js";
+import { buildServer } from "./server.js";
 
 // Owner: Person B. Implements the Runner API in packages/contracts/src/api.ts.
 // The runner owns the whole pipeline: sandboxes -> plan -> run -> verify -> session.complete.
-// TODO(B): orchestrator/, planner/, sandbox/, executor/, verifier/, view/ (live view page + /live WS + /preview proxy).
 
-const app = Fastify({ logger: true });
-const TOKEN = process.env.RUNNER_TOKEN ?? "change-me";
+const rt = createRuntime();
+const app = buildServer(rt);
 
-// Browser-facing routes (embedded in Jira) carry a signed ?t= token instead of the header.
-const browserRoute = (url: string) => /^\/(health|view|preview|live|artifacts)(\/|$|\?)/.test(url);
+const removed = await rt.sandboxes.removeOrphans().catch((err) => (app.log.warn(`orphan cleanup failed: ${err}`), []));
+if (removed.length) app.log.info(`removed ${removed.length} leftover sandboxes: ${removed.join(", ")}`);
+rt.sandboxes.startSweeper((id) => (rt.orchestrator.has(id) ? rt.orchestrator.teardown(id, `Idle for ${rt.cfg.idleTtlMin} min: sandboxes shut down`) : undefined));
 
-app.addHook("onRequest", async (req, reply) => {
-  if (browserRoute(req.url)) return;
-  if (req.headers[TOKEN_HEADER] !== TOKEN) return reply.code(401).send();
-});
+if (!rt.cfg.eventsUrl) app.log.warn("EVENTS_URL is not set: events go to the console only");
+if (!rt.cfg.factoryApiKey) app.log.warn("FACTORY_API_KEY is not set: the planner uses canned scenarios and templates");
+if (rt.cfg.token === "change-me") app.log.warn("RUNNER_TOKEN is the default: set it before exposing the runner");
 
-app.get("/health", async () => ({ ok: true, service: "runner" }));
+for (const sig of ["SIGTERM", "SIGINT"] as const) {
+  process.once(sig, async () => {
+    app.log.info(`${sig}: shutting down`);
+    await app.close();
+    await Promise.allSettled(rt.orchestrator.list().map((id) => rt.orchestrator.teardown(id, "Runner restarted: sandboxes removed")));
+    await rt.close();
+    process.exit(0);
+  });
+}
 
-app.listen({ host: "0.0.0.0", port: Number(process.env.PORT ?? 4100) });
+await app.listen({ host: rt.cfg.host, port: rt.cfg.port });
