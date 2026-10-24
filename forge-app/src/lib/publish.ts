@@ -2,10 +2,10 @@ import { asApp, route } from "@forge/api";
 import { kvs } from "@forge/kvs";
 import { createHash } from "node:crypto";
 import type { Route } from "@forge/api";
-import type { Actor, AuditEntry, Diff, EventType, Recommendation, Report, Scenario, Session } from "../contracts/index";
-import { notTested, reportAdf, VERDICT_LABEL } from "./adf";
+import type { Actor, AuditEntry, Diff, EventType, Recommendation, Report, Run, Scenario, Session } from "../contracts/index";
+import { bugAdf, notTested, reportAdf, VERDICT_LABEL, type Evidence } from "./adf";
 import { hasGithubToken, postPrComment, setCommitStatus, updatePrComment, type StatusState } from "./github-write";
-import { appendAudit, appendEvents } from "./store";
+import { appendAudit, appendEvents, keys } from "./store";
 
 // Every write the agent makes in Jira or GitHub. Each one lands in the audit log and the timeline.
 // Writes that change the ticket's workflow (transitions) only run in approveTransition, after a human click.
@@ -172,4 +172,85 @@ export async function publishReport(session: Session, report: Report, scenarios:
   await kvs.set(pubKeys.published(session.id, hash), done);
   await kvs.set(pubKeys.comments(session.id), ids);
   return { hash, jira: jiraOut, github: githubOut, publishedAt: new Date().toISOString() };
+}
+
+// ---------- Regression Bug ----------
+
+type IssueType = { id: string; name: string; subtask?: boolean };
+
+/** Bug if the project has one, else Task, else the first standard type. */
+async function bugType(projectKey: string): Promise<IssueType> {
+  let types: IssueType[] = [];
+  try {
+    const res = await jira<{ issueTypes?: IssueType[]; values?: IssueType[] }>("GET", route`/rest/api/3/issue/createmeta/${projectKey}/issuetypes`);
+    types = res.issueTypes ?? res.values ?? [];
+  } catch {
+    types = (await jira<{ issueTypes?: IssueType[] }>("GET", route`/rest/api/3/project/${projectKey}`)).issueTypes ?? [];
+  }
+  const named = (n: string) => types.find((t) => t.name.toLowerCase() === n);
+  const pick = named("bug") ?? named("task") ?? types.find((t) => !t.subtask);
+  if (!pick) throw new Error(`no issue type to create in ${projectKey}`);
+  return pick;
+}
+
+/** "Relates" if it exists, else the first link type. */
+async function linkTypeName() {
+  const res = await jira<{ issueLinkTypes: { name: string }[] }>("GET", route`/rest/api/3/issueLinkType`);
+  return (res.issueLinkTypes.find((t) => t.name.toLowerCase() === "relates") ?? res.issueLinkTypes[0])?.name;
+}
+
+// Artifacts are served by the runner at /artifacts/<sessionId>/<path>.
+function artifactUrl(sessionId: string, path: string) {
+  const rel = path.startsWith(`${sessionId}/`) ? path : `${sessionId}/${path}`;
+  return `${process.env.RUNNER_URL ?? ""}/artifacts/${rel}`;
+}
+
+function evidenceFor(session: Session, runs: Run[]): Evidence[] {
+  const out: Evidence[] = runs.flatMap((r) =>
+    r.artifacts.map((a) => ({ label: `${r.env} attempt ${r.attempt}: ${a.kind} (${a.path.split("/").pop()})`, url: artifactUrl(session.id, a.path) })),
+  );
+  if (session.prUrl) out.push({ label: `Pull request ${session.repo}#${session.prNumber}`, url: session.prUrl });
+  return out;
+}
+
+/**
+ * File a Bug for a failing scenario in the issue's project, linked to the issue. Call only after a human
+ * confirmed (panel click or Rovo "yes"); `actor` is their accountId. Filing the same scenario twice returns
+ * the first key. Throws if the Bug could not be created.
+ */
+export async function fileRegressionBug(session: Session, scenario: Scenario, diff: Diff, actor: string) {
+  const existing = await kvs.get<string>(pubKeys.bug(session.id, scenario.id));
+  if (existing) return existing;
+
+  const runs = ((await kvs.get<Run[]>(keys.runs(session.id))) ?? []).filter((r) => diff.runIds.includes(r.id));
+  const headRuns = runs.filter((r) => r.env === "head");
+  const projectKey = session.issueKey.split("-")[0];
+  const summary = `Regression from ${session.repo}#${session.prNumber}: ${scenario.objective}`.slice(0, 254);
+  const inputs = { scenarioId: scenario.id, classification: diff.classification, runIds: diff.runIds };
+
+  let key: string;
+  try {
+    const type = await bugType(projectKey);
+    const description = bugAdf(session, scenario, diff, headRuns, evidenceFor(session, runs));
+    const fields = { project: { key: projectKey }, issuetype: { id: type.id }, summary, description, labels: ["pr-confidence"] };
+    key = (await jira<{ key: string }>("POST", route`/rest/api/3/issue`, { fields })).key;
+  } catch (e) {
+    await audit(session, { action: "jira.bug", target: session.issueKey, approvedBy: actor, inputs, reason: `create failed: ${errText(e)}`, result: "failed" });
+    await emit(session, "agent", "bug.filed", false, `Bug for ${scenario.id} failed: ${errText(e)}`);
+    throw e;
+  }
+  await kvs.set(pubKeys.bug(session.id, scenario.id), key);
+
+  let linked = "";
+  try {
+    linked = (await linkTypeName()) ?? "";
+    if (linked) await jira("POST", route`/rest/api/3/issueLink`, { type: { name: linked }, inwardIssue: { key }, outwardIssue: { key: session.issueKey } });
+  } catch (e) {
+    console.log(`link ${key} -> ${session.issueKey} failed: ${errText(e)}`);
+    linked = "";
+  }
+  const reason = `${scenario.id} ${diff.classification}; ${linked ? `linked "${linked}" to ${session.issueKey}` : "not linked"}`;
+  await audit(session, { action: "jira.bug", target: key, approvedBy: actor, inputs, reason, result: "ok" });
+  await emit(session, "agent", "bug.filed", true, `Filed ${key} for ${scenario.id}`, { key, scenarioId: scenario.id });
+  return key;
 }
