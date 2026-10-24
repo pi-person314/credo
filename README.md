@@ -24,6 +24,7 @@ Full spec: [docs/SPEC.md](docs/SPEC.md) · Setup, secrets and accounts: [docs/SE
 
 ## Changelog
 
+- **AC3 reworded** (demo data): PAY-12's third acceptance criterion now matches checkout-demo: "A provider timeout marks the order payment_failed and creates no charge" (was "leaves the order pending", which failed on base and PR alike). Same change in the fixture, its Confluence excerpt, and docs/SETUP.md; the Jira ticket is edited by hand.
 - **GITHUB_TOKEN without VM access** (infra): the deploy workflow copies the repo secret `VM_GITHUB_TOKEN` into the VM's `.env` (over stdin) and recreates the runner when it changed.
 - **VM smoke test** (infra): `infra/smoke.sh` runs the demo session (checkout-demo PR #1) on the VM against the local runner and prints its events and diffs; the RUNNER_TOKEN never leaves the VM. From GitHub: Actions → deploy → Run workflow with `smoke` (add `probe_only` to skip the redeploy, `keep` to leave the sandboxes up for the live view).
 - **First Forge deploy** (forge-app): app registered (`app.id` in the manifest), deployed to development and installed on the demo Jira + Confluence site. Fixes needed to get there: panel icon, real runner host in `external.fetch`, emit on for Forge's bundler, contracts copy drops `.js` from relative imports. Web triggers now refuse every request while `RUNNER_TOKEN` / `GITHUB_WEBHOOK_SECRET` are unset, and a bad event body returns 400 instead of crashing.
