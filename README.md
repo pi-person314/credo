@@ -16,14 +16,15 @@ Full spec: [docs/SPEC.md](docs/SPEC.md) · Setup, secrets and accounts: [docs/SE
 | Area | Owner | State |
 |---|---|---|
 | Shared contracts (`packages/contracts`) | both | ✅ v0.2: types, scenario format, runner API, events, coverage + verdict rules, 21 tests |
-| `forge-app` (Jira panel, Rovo agent, web triggers, KVS, publish) | A | 🟡 registered and deployed to development on the demo Jira site; manifest + module stubs; GitHub webhook verify + enqueue; events web trigger stores events |
-| `mocks/runner-mock` | A | ✅ fake runner: full canned pipeline + asks, posts events to the Forge web trigger |
+| `forge-app` (Jira panel, Rovo agent, web triggers, KVS, publish) | A | 🟡 P0 deployed to development (v3): ingest (Jira, Confluence, GitHub files, Greptile, manifest), event projection into KVS, report + verdict, Jira/GitHub publish, guarded Bug + transition, issue panel with live view Frame, Rovo actions. Not yet run end to end on a real PR |
+| `mocks/runner-mock` | A | ✅ fake runner: full canned pipeline + asks, posts events to the Forge web trigger; `replay` CLI posts the sequence directly |
 | `runner` (orchestrator, planner, sandboxes, executor, verifier, live view) | B | 🟡 full pipeline + Runner API + dev:cli; demo bug NEW_REGRESSION 10/10; live view page |
 | `demo-app` | B | ✅ lives in [pi-person314/checkout-demo](https://github.com/pi-person314/checkout-demo); bug PR #1 |
 | `infra` (compose: laptop + tunnel or Azure VM + Caddy) | B | 🟡 runner image, compose (127.0.0.1:4100), edge Caddyfile, deploy script; not yet deployed (VM SSH pending) |
 
 ## Changelog
 
+- **Forge P0** (forge-app, mocks): ingest builds the Context from the PR, Jira issue + acceptance criteria, linked Confluence pages, Greptile comments and the repo manifest, then starts the runner. Runner events are projected into KVS (scenarios, runs, diffs, asks, sandbox state); `session.complete` / `ask.complete` build the report and publish it as a Jira comment, a GitHub PR comment and the `PR Confidence` commit status (edited in place, never posted twice). A blocking regression proposes moving the issue back to In Progress; the move and any regression Bug need a human click (panel) or confirmation (Rovo). The issue panel shows verdict, criteria, sandbox knobs + embedded live view, tests with evidence, asks, activity and audit. Manifest adds the `live-view` resource, the runner host under `external.frames` and `read:page:confluence`. `runner-mock replay` posts the canned sequence to the web trigger.
 - **First Forge deploy** (forge-app): app registered (`app.id` in the manifest), deployed to development and installed on the demo Jira + Confluence site. Fixes needed to get there: panel icon, real runner host in `external.fetch`, emit on for Forge's bundler, contracts copy drops `.js` from relative imports. Web triggers now refuse every request while `RUNNER_TOKEN` / `GITHUB_WEBHOOK_SECRET` are unset, and a bad event body returns 400 instead of crashing.
 - **Take over the agent's browser** (runner, P1): in the live view, tick "Take over" and click, double-click, scroll or type on either screen (or both at once); `POST /view/:id/input?t=`. Refused while the agent is running a test.
 - **Export as .spec.ts** (runner, P1): any scenario as a standalone Playwright test (`GET /sessions/:id/scenarios/:scenarioId/spec` with x-token, or the `.spec.ts` link in the live view). Exported specs pass on base and fail on the PR for the race scenarios.
