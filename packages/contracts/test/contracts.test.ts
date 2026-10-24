@@ -74,3 +74,17 @@ describe("findJiraKey", () => {
   it("falls back to branch", () => expect(findJiraKey("fix retries", "feat/PAY-12-retry")).toBe("PAY-12"));
   it("returns undefined", () => expect(findJiraKey("fix", "main")).toBeUndefined());
 });
+
+describe("session token", () => {
+  it("round-trips and rejects tampering, other sessions and expiry", async () => {
+    const { signSessionToken, verifySessionToken } = await import("../src/token.js");
+    const now = Date.UTC(2026, 9, 24);
+    const t = signSessionToken("s3cret", "ses_1", 60, now);
+    expect(verifySessionToken("s3cret", "ses_1", t, now)).toBe(true);
+    expect(verifySessionToken("s3cret", "ses_2", t, now)).toBe(false);
+    expect(verifySessionToken("other", "ses_1", t, now)).toBe(false);
+    expect(verifySessionToken("s3cret", "ses_1", t + "x", now)).toBe(false);
+    expect(verifySessionToken("s3cret", "ses_1", t, now + 61_000)).toBe(false);
+    expect(verifySessionToken("s3cret", "ses_1", undefined, now)).toBe(false);
+  });
+});
