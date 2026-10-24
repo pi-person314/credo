@@ -104,11 +104,24 @@ export async function updateSandbox(id: string, patch: Partial<SandboxStatus>) {
 
 // ---------- events ----------
 
+// KVS values are capped at 240 KiB. The timeline only needs a summary of each event (the full
+// Run/Diff/Scenario/Report live in their own keys), so stored events keep `data` only when it is small.
+// 50 events x (EVENT_DATA_CHARS + EVENT_MESSAGE_CHARS) stays well under the limit.
+const EVENT_DATA_CHARS = 2_000;
+const EVENT_MESSAGE_CHARS = 1_000;
+
+function forTimeline(e: Event): Event {
+  const message = e.message.length > EVENT_MESSAGE_CHARS ? e.message.slice(0, EVENT_MESSAGE_CHARS - 1) + "…" : e.message;
+  if (e.data === undefined) return { ...e, message };
+  const size = JSON.stringify(e.data)?.length ?? 0;
+  return size > EVENT_DATA_CHARS ? { ...e, message, data: { truncated: true, chars: size } } : { ...e, message };
+}
+
 export async function appendEvents(sessionId: string, events: Event[]) {
   // TODO(A): not concurrency-safe. Fine for one demo session; use a transaction or Forge SQL if needed.
   let head = (await kvs.get<number>(keys.eventsHead(sessionId))) ?? 0;
   let chunk = (await kvs.get<Event[]>(keys.events(sessionId, head))) ?? [];
-  for (const e of events) {
+  for (const e of events.map(forTimeline)) {
     if (chunk.length >= EVENTS_PER_CHUNK) {
       await kvs.set(keys.events(sessionId, head), chunk);
       head += 1;

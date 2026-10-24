@@ -6,6 +6,8 @@ import { AppManifest, type ChangedFile, type Finding, type Severity } from "../c
 const API = "https://api.github.com";
 const MAX_FILES = 100;
 const PATCH_CHARS = 4000;
+// Context is stored in one KVS value (240 KiB cap), so all patches together get a budget too.
+const TOTAL_PATCH_CHARS = 100_000;
 const FINDING_CHARS = 1000;
 
 export type PrRef = { repo: string; prNumber: number }; // repo is "owner/name"
@@ -33,16 +35,21 @@ const STATUS: Record<string, ChangedFile["status"]> = {
   copied: "added",
 };
 
-/** Files changed by the PR (first 100), patches capped. */
+/** Files changed by the PR (first 100), patches capped per file and in total. */
 export async function readPrFiles({ repo, prNumber }: PrRef): Promise<ChangedFile[]> {
   const files = await get<any[]>(`/repos/${repo}/pulls/${prNumber}/files?per_page=${MAX_FILES}`);
-  return files.map((f) => ({
-    path: String(f.filename),
-    status: STATUS[f.status] ?? "modified",
-    additions: Number(f.additions ?? 0),
-    deletions: Number(f.deletions ?? 0),
-    patch: typeof f.patch === "string" ? f.patch.slice(0, PATCH_CHARS) : undefined,
-  }));
+  let budget = TOTAL_PATCH_CHARS;
+  return files.map((f) => {
+    const patch = typeof f.patch === "string" && budget > 0 ? f.patch.slice(0, Math.min(PATCH_CHARS, budget)) : undefined;
+    budget -= patch?.length ?? 0;
+    return {
+      path: String(f.filename),
+      status: STATUS[f.status] ?? "modified",
+      additions: Number(f.additions ?? 0),
+      deletions: Number(f.deletions ?? 0),
+      patch,
+    };
+  });
 }
 
 const isGreptile = (c: any) => /greptile/i.test(String(c?.user?.login ?? ""));
