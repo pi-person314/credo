@@ -18,12 +18,13 @@ Full spec: [docs/SPEC.md](docs/SPEC.md) · Setup, secrets and accounts: [docs/SE
 | Shared contracts (`packages/contracts`) | both | ✅ v0.2: types, scenario format, runner API, events, coverage + verdict rules, 21 tests |
 | `forge-app` (Jira panel, Rovo agent, web triggers, KVS, publish) | A | 🟡 manifest + module stubs; GitHub webhook verify + enqueue; events web trigger stores events |
 | `mocks/runner-mock` | A | ✅ fake runner: full canned pipeline + asks, posts events to the Forge web trigger |
-| `runner` (orchestrator, planner, sandboxes, executor, verifier, live view) | B | 🟡 full pipeline + Runner API + dev:cli; demo bug NEW_REGRESSION 10/10. Live view next |
+| `runner` (orchestrator, planner, sandboxes, executor, verifier, live view) | B | 🟡 full pipeline + Runner API + dev:cli; demo bug NEW_REGRESSION 10/10; live view page |
 | `demo-app` | B | ✅ lives in [pi-person314/checkout-demo](https://github.com/pi-person314/checkout-demo); bug PR #1 |
 | `infra` (compose: laptop + tunnel or Azure VM + Caddy) | B | 🟡 draft |
 
 ## Changelog
 
+- **Live view** (runner): `/view/:id?t=` page for the Jira panel: Watch the agent (CDP screencast over `WS /live/:id/:env`) or Try it yourself (both apps through `/preview/:id/:env/<token>/`), knobs + reset for both, live charge/order counts, test table, activity feed. `/artifacts/:id/*?t=` serves evidence. `GET /sessions/:id/view-url` (x-token) returns a signed URL for Forge's `getViewUrl`.
 - **Orchestrator + Runner API + CLI** (runner): `POST /sessions` runs sandboxes → route → plan → run both → verify → follow-ups → `session.complete` in the background; asks queue behind it (and rebuild sandboxes after idle teardown); knobs/reset hit both; status; teardown; idle sweeper; orphan cleanup on start. Events go to the Forge web trigger in order with retries. `dev:cli` runs it all locally; `--scenarios … --repeat 10` is the 10/10 check (base 1 charge, PR 5, every time). `mocks/fixtures/context.json` now points at checkout-demo PR #1.
 - **Droid planner** (runner): prompts Factory Droid (`droid exec`, read-only) with the ticket, acceptance criteria, Confluence, findings, diff and manifest; validates the JSON against the Scenario schema and the manifest, retries once with the errors, falls back to canned scenarios (pipeline) or keyword templates (asks). Follow-ups: one round, up to 3, only after a surprise. Docs-only PRs route to STATIC_ONLY.
 - **Executor + verifier** (runner): runs scenario steps (`http`, `parallel`, `ui` via Playwright, `wait`) with `$name.path` references, checks `db_count` / `http_status` / `json_path` / `ui_text`, saves evidence (HTTP log, DB rows, screenshot, Playwright trace), streams the agent's browser as JPEG frames, reruns PR failures twice and labels each diff. Docker test: the 3 fixture scenarios give UNCHANGED_PASS, NEW_REGRESSION, NEW_REGRESSION on checkout-demo PR #1.

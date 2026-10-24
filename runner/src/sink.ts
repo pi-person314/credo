@@ -67,7 +67,7 @@ export class MemorySink implements Sink {
 
   events(sessionId: string, after?: string): Event[] {
     const list = this.bySession.get(sessionId) ?? [];
-    return after ? list.filter((e) => e.ts > after) : [...list];
+    return after ? list.filter((e) => e.ts >= after) : [...list];
   }
 
   subscribe(fn: (e: Event) => void): () => void {

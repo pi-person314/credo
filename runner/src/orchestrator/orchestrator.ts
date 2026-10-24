@@ -143,6 +143,14 @@ export class Orchestrator {
     const after = this.d.sandboxes.status(id);
     if (after.base !== "healthy" || after.head !== "healthy") throw new Error(`sandboxes not healthy (base ${after.base}, head ${after.head})`);
     await this.d.sandboxes.resetBoth(id);
+    // Open the agent's browser on the app's first page so the live view has something to show right away.
+    const first = s.context.manifest.pages.find((p) => !p.includes(":"));
+    if (this.d.browser && first) {
+      for (const env of ENVS) {
+        const url = this.d.sandboxes.get(id, env)?.url;
+        if (url) void this.d.browser.page(id, env, url).then((p) => p.goto(first, { timeout: 10_000 })).catch(() => undefined);
+      }
+    }
     if (s.knobs.provider !== "ok" || s.knobs.latencyMs) await this.d.sandboxes.setKnobsBoth(id, s.knobs);
   }
 
