@@ -3,7 +3,7 @@
 # this workflow does it for them (and for anyone without the key).
 #
 # One-time setup (repo Settings → Secrets and variables → Actions):
-#   VM_SSH_KEY   private key whose .pub is in azureuser's ~/.ssh/authorized_keys on the VM
+#   VM_SSH_KEY   private key whose .pub is in vmadmin's ~/.ssh/authorized_keys on the VM
 # and the VM's NSG must allow inbound 22 from GitHub Actions (simplest: any source, key auth only).
 #
 # Runs on every push to main that touches the runner side, and on demand (Actions → deploy → Run workflow).
@@ -20,7 +20,7 @@ on:
     paths: [runner/**, packages/**, infra/**, pnpm-lock.yaml, .github/workflows/deploy.yml]
 concurrency: { group: deploy-vm, cancel-in-progress: false }
 env:
-  VM_HOST: azureuser@pr-agent-saksham-20261024.westus2.cloudapp.azure.com
+  VM_HOST: vmadmin@pr-agent-saksham-20261024.westus2.cloudapp.azure.com
   PUBLIC_URL: https://pr-agent-saksham-20261024.westus2.cloudapp.azure.com
 jobs:
   deploy:
@@ -39,12 +39,13 @@ jobs:
       - name: Probe the VM
         if: steps.key.outputs.ok
         run: |
-          ssh -i ~/.ssh/vm -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 "$VM_HOST" '
+          ssh -o IdentitiesOnly=yes -i ~/.ssh/vm -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 "$VM_HOST" '
             set -x
-            hostname; uptime; df -h / | tail -1
-            docker ps --format "{{.Names}}\t{{.Status}}\t{{.Ports}}"
+            hostname; id; sudo -n true && echo "sudo ok"; uptime; df -h / | tail -1
+            sudo -n docker ps --format "{{.Names}}\t{{.Status}}\t{{.Ports}}"
             ls -la /opt/pr-agent /opt/pr-agent/edge || true
-            test -s /opt/pr-agent/app/.env && echo ".env present ($(grep -c "=" /opt/pr-agent/app/.env) keys: $(cut -d= -f1 /opt/pr-agent/app/.env | grep -v "^#" | tr "\n" " "))" || echo ".env MISSING"
+            ls -la /opt/pr-agent/app
+            test -s /opt/pr-agent/app/.env && echo ".env present, keys: $(sudo -n grep -oE "^[A-Z_][A-Z0-9_]*=" /opt/pr-agent/app/.env | tr -d = | tr "\n" " ")" || echo ".env MISSING"
             ss -ltnp 2>/dev/null | grep -E ":(80|443|4100)\b" || true
           '
       - name: Deploy

@@ -6,9 +6,9 @@
 #
 # The VM keeps its secrets in $VM_DIR/.env (copy .env.example and fill it in once).
 set -euo pipefail
-HOST=${VM_HOST:-azureuser@pr-agent-saksham-20261024.westus2.cloudapp.azure.com}
+HOST=${VM_HOST:-vmadmin@pr-agent-saksham-20261024.westus2.cloudapp.azure.com}
 DIR=${VM_DIR:-/opt/pr-agent/app}
-SSH=(ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 ${VM_KEY:+-i "$VM_KEY"} "$HOST")
+SSH=(ssh -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 ${VM_KEY:+-i "$VM_KEY"} "$HOST")
 
 cd "$(git rev-parse --show-toplevel)"
 REV=$(git rev-parse --short HEAD)
@@ -23,8 +23,11 @@ if ! "${SSH[@]}" "test -s '$DIR/.env'"; then
   exit 1
 fi
 
+# Use sudo when the SSH user isn't in the docker group.
+DOCKER=$("${SSH[@]}" 'docker info >/dev/null 2>&1 && echo docker || echo "sudo -n docker"')
+
 echo "==> building and starting the runner"
-"${SSH[@]}" "cd '$DIR' && docker compose -f infra/compose.yml up -d --build --remove-orphans runner && docker compose -f infra/compose.yml ps runner"
+"${SSH[@]}" "cd '$DIR' && $DOCKER compose -f infra/compose.yml up -d --build --remove-orphans runner && $DOCKER compose -f infra/compose.yml ps runner"
 
 echo "==> health"
 for i in $(seq 1 30); do
@@ -32,5 +35,5 @@ for i in $(seq 1 30); do
   sleep 2
 done
 echo "!! runner did not become healthy; logs:" >&2
-"${SSH[@]}" "docker logs --tail 50 pr-agent-runner" >&2
+"${SSH[@]}" "$DOCKER logs --tail 50 pr-agent-runner" >&2
 exit 1
