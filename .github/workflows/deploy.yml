@@ -15,6 +15,10 @@ on:
         description: Only check SSH, the edge Caddy and .env; don't deploy
         type: boolean
         default: false
+      update_edge:
+        description: Install infra/edge/Caddyfile into the edge Caddy (keeps a backup) and reload it
+        type: boolean
+        default: false
   push:
     branches: [main]
     paths: [runner/**, packages/**, infra/**, pnpm-lock.yaml, .github/workflows/deploy.yml]
@@ -44,10 +48,23 @@ jobs:
             hostname; id; sudo -n true && echo "sudo ok"; uptime; df -h / | tail -1
             sudo -n docker ps --format "{{.Names}}\t{{.Status}}\t{{.Ports}}"
             ls -la /opt/pr-agent /opt/pr-agent/edge || true
+            cat /opt/pr-agent/edge/Caddyfile /opt/pr-agent/edge/compose.yaml || true
             ls -la /opt/pr-agent/app
             test -s /opt/pr-agent/app/.env && echo ".env present, keys: $(sudo -n grep -oE "^[A-Z_][A-Z0-9_]*=" /opt/pr-agent/app/.env | tr -d = | tr "\n" " ")" || echo ".env MISSING"
             ss -ltnp 2>/dev/null | grep -E ":(80|443|4100)\b" || true
           '
+      - name: Update the edge Caddy
+        if: steps.key.outputs.ok && inputs.update_edge
+        run: |
+          ssh -o IdentitiesOnly=yes -i ~/.ssh/vm "$VM_HOST" '
+            set -e
+            cd /opt/pr-agent/edge
+            sudo cp Caddyfile "Caddyfile.bak.$(date +%Y%m%d%H%M%S)"
+            sudo tee Caddyfile.new >/dev/null
+            sudo docker run --rm -v "$PWD/Caddyfile.new:/etc/caddy/Caddyfile:ro" caddy:2.8 caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+            sudo mv Caddyfile.new Caddyfile
+            sudo docker compose -p pr-agent-edge exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
+          ' < infra/edge/Caddyfile
       - name: Deploy
         if: steps.key.outputs.ok && !inputs.probe_only
         run: VM_KEY=~/.ssh/vm infra/deploy.sh
