@@ -8,7 +8,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 RUNNER=${RUNNER:-http://127.0.0.1:4100}
 TIMEOUT_SEC=${TIMEOUT_SEC:-600}
-TOKEN=$(grep -E '^RUNNER_TOKEN=' .env | head -1 | cut -d= -f2- | sed 's/[[:space:]]*#.*//; s/[[:space:]]*$//')
+# The token the running container actually got (compose strips quotes and comments); .env as a fallback.
+TOKEN=$(docker exec pr-agent-runner printenv RUNNER_TOKEN 2>/dev/null ||
+  grep -E '^RUNNER_TOKEN=' .env | head -1 | cut -d= -f2- | sed 's/[[:space:]]*#.*//; s/[[:space:]]*$//; s/^["'"'"']//; s/["'"'"']$//')
 [ -n "$TOKEN" ] || { echo "RUNNER_TOKEN missing in .env" >&2; exit 1; }
 grep -qE '^GITHUB_TOKEN=.+' .env || echo "WARN: GITHUB_TOKEN is empty; private repos can't be fetched"
 grep -qE '^FACTORY_API_KEY=.+' .env || echo "WARN: FACTORY_API_KEY is empty; the planner will use canned scenarios"
