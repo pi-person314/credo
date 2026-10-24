@@ -3,10 +3,10 @@ import { Button, Heading, Inline, Link, Lozenge, Stack, Text } from "@forge/reac
 import type { Event, SessionDetail } from "../../contracts";
 import { isActive, sandboxLook, sandboxState, verdictLook, verdictText } from "../ui";
 
-type Props = { detail: SessionDetail; events: Event[]; onReset: () => void; resetting: boolean };
+type Props = { detail: SessionDetail; events: Event[]; onReset: () => void; canReset: boolean };
 
 // Verdict, PR link, pipeline + sandbox status, Reset.
-export const Header = ({ detail, events, onReset, resetting }: Props) => {
+export const Header = ({ detail, events, onReset, canReset }: Props) => {
   const { session } = detail;
   const verdict = detail.report?.recommendation ?? session.recommendation;
   const sandbox = sandboxState(events);
@@ -16,7 +16,7 @@ export const Header = ({ detail, events, onReset, resetting }: Props) => {
         <Heading size="small">
           PR #{session.prNumber}: {session.title}
         </Heading>
-        <Button appearance="subtle" iconBefore="refresh" onClick={onReset} isDisabled={resetting || sandbox !== "healthy"}>
+        <Button appearance="subtle" iconBefore="refresh" onClick={onReset} isDisabled={!canReset}>
           Reset
         </Button>
       </Inline>
