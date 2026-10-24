@@ -19,6 +19,12 @@ modules:
       resolver:
         function: ingestConsumer
         method: ingest
+    # Builds and publishes the report after session.complete / ask.complete (pushed by runner-events).
+    - key: report-consumer
+      queue: report
+      resolver:
+        function: reportConsumer
+        method: report
 
   jira:issuePanel:
     - key: pr-confidence-panel
@@ -98,6 +104,8 @@ modules:
       handler: index.runnerEvents
     - key: ingestConsumer
       handler: index.ingestConsumer
+    - key: reportConsumer
+      handler: index.reportConsumer
     - key: resolver
       handler: index.resolver
     - key: rovoGetVerification
