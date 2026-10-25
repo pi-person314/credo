@@ -25,7 +25,7 @@ async function gh<T>(method: string, path: string, body: unknown): Promise<T | u
     },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`github ${method} ${path} -> ${res.status}`);
+  if (!res.ok) throw new Error(`github ${method} ${path} -> ${res.status} ${(await res.text().catch(() => "")).slice(0, 300)}`);
   return (await res.json()) as T;
 }
 

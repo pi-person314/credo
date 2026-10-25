@@ -26,7 +26,7 @@ async function jira<T>(method: string, path: Route, body?: unknown): Promise<T> 
     headers: { accept: "application/json", "content-type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`jira ${method} ${path.value} -> ${res.status}`);
+  if (!res.ok) throw new Error(`jira ${method} ${path.value} -> ${res.status} ${(await res.text().catch(() => "")).slice(0, 300)}`);
   const raw = await res.text(); // 201/204 on links and transitions have no body
   return (raw ? JSON.parse(raw) : undefined) as T;
 }

@@ -2,7 +2,7 @@ import type { Assertion, Diff, Recommendation, Report, Run, Scenario, Session, S
 
 // Atlassian Document Format builders for Jira comments and Bug descriptions.
 // Wording rule: say what was checked and what was not. Never call a PR safe.
-export type Node = { type: string; attrs?: Record<string, unknown>; content?: Node[]; text?: string; marks?: unknown[] };
+export type Node = { type: string; version?: 1; attrs?: Record<string, unknown>; content?: Node[]; text?: string; marks?: unknown[] };
 
 export const text = (value: string, marks?: unknown[]): Node => ({ type: "text", text: value || " ", ...(marks ? { marks } : {}) });
 export const strong = (value: string) => text(value, [{ type: "strong" }]);
@@ -13,7 +13,7 @@ export const heading = (level: number, value: string): Node => ({ type: "heading
 export const bullets = (items: Node[][]): Node => ({ type: "bulletList", content: items.map((c) => ({ type: "listItem", content: [para(...c)] })) });
 export const ordered = (items: Node[][]): Node => ({ type: "orderedList", content: items.map((c) => ({ type: "listItem", content: [para(...c)] })) });
 export const panel = (panelType: "info" | "success" | "warning" | "error", ...content: Node[]): Node => ({ type: "panel", attrs: { panelType }, content });
-export const doc = (...content: Node[]): Node => ({ type: "doc", attrs: { version: 1 }, content } as Node);
+export const doc = (...content: Node[]): Node => ({ type: "doc", version: 1, content });
 
 function table(header: string[], rows: Node[][][]): Node {
   const cell = (type: string, c: Node[]) => ({ type, content: [para(...c)] });
