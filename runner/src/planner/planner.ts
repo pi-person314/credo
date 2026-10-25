@@ -32,13 +32,21 @@ export class Planner {
   private async generate(prompt: string, context: Context, origin: Origin, max: number, takenIds: string[]): Promise<PlanResult | undefined> {
     if (!this.llm.available()) return undefined;
     const errors: string[] = [];
+    const acceptanceCriteria = context.jira?.acceptanceCriteria ?? [];
     let current = prompt;
+    // Valid scenarios from attempt 1 that over-claimed a success criterion: kept (with the claim dropped) if the retry fails.
+    let firstTry: Scenario[] = [];
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         const text = await this.llm.complete(current);
-        const v = validateScenarios(extractJson(text), context.manifest, { origin, max, takenIds });
+        const v = validateScenarios(extractJson(text), context.manifest, { origin, max, takenIds, acceptanceCriteria });
         errors.push(...v.errors);
-        if (v.scenarios.length > 0) return { scenarios: v.scenarios, source: attempt === 1 ? this.llm.name : `${this.llm.name} (retry)`, errors };
+        const source = attempt === 1 ? this.llm.name : `${this.llm.name} (retry)`;
+        if (v.scenarios.length > 0 && (attempt === 2 || v.coverageErrors.length === 0)) return { scenarios: v.scenarios, source, errors };
+        if (v.scenarios.length > 0) {
+          firstTry = v.scenarios;
+          this.log(`planner over-claimed success criteria, asking again: ${v.coverageErrors.join(" | ")}`);
+        }
         current = retryPrompt(prompt, v.errors.length ? v.errors : ["no scenarios"]);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -47,6 +55,7 @@ export class Planner {
         current = retryPrompt(prompt, [msg]);
       }
     }
+    if (firstTry.length) return { scenarios: firstTry, source: this.llm.name, errors };
     this.log(`planner gave nothing valid: ${errors.slice(-3).join(" | ")}`);
     return { scenarios: [], source: this.llm.name, errors };
   }
