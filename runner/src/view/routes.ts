@@ -74,6 +74,9 @@ export async function viewRoutes(app: FastifyInstance, rt: Runtime) {
     return spec(req.params.id, req.params.scenarioId.replace(/\.spec\.ts$/, ""), reply);
   });
 
+  // Browsers ask for it without the token; answer quietly instead of a 401 in the console.
+  app.get("/favicon.ico", async (_req, reply) => reply.code(204).send());
+
   app.get<{ Params: { id: string }; Querystring: { t?: string } }>("/view/:id", async (req, reply) => {
     const { id } = req.params;
     if (!ok(id, req.query.t)) return deny(reply);

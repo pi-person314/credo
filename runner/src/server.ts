@@ -6,7 +6,7 @@ import type { Runtime } from "./runtime.js";
 import { viewRoutes } from "./view/routes.js";
 
 // Browser-facing routes (embedded in Jira) carry a signed ?t= token instead of the header.
-const browserRoute = (url: string) => /^\/(health|view|preview|live|artifacts)(\/|$|\?)/.test(url);
+const browserRoute = (url: string) => /^\/(health|view|preview|live|artifacts|favicon\.ico)(\/|$|\?)/.test(url);
 
 /** The Runner API from packages/contracts/src/api.ts. Every call returns fast; work is reported as events. */
 export function buildServer(rt: Runtime, opts: { logger?: boolean } = {}): FastifyInstance {

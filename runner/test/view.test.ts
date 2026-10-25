@@ -81,3 +81,9 @@ describe("replay", () => {
     expect((await app.inject(`/view/ses_1/replay/sc_a?t=${t}`)).json()).toEqual({ scenarioId: "sc_a", base: [], head: [] });
   });
 });
+
+describe("favicon", () => {
+  it("answers without a token", async () => {
+    expect((await app.inject("/favicon.ico")).statusCode).toBe(204);
+  });
+});
