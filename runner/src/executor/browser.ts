@@ -18,6 +18,9 @@ interface Tab {
 
 export const VIEWPORT = { width: 1000, height: 720 };
 
+/** Frames kept per (session, side, scenario) for the live view's Replay. Pages are mostly static, so this covers a scenario. */
+const REPLAY_FRAMES = 40;
+
 /**
  * The agent's own browser: one Chromium, one tab per (session, env), streamed as JPEG frames
  * (CDP screencast) for the live view. Emits "frame" with an AgentFrame.
@@ -25,6 +28,8 @@ export const VIEWPORT = { width: 1000, height: 720 };
 export class AgentBrowser extends EventEmitter {
   private browser?: Promise<Browser>;
   private tabs = new Map<string, Promise<Tab>>();
+  /** Frames per `${sessionId}/${env}/${scenarioId}`, for Replay after the scenario has finished. */
+  private recordings = new Map<string, AgentFrame[]>();
 
   private key = (sessionId: string, env: Env) => `${sessionId}/${env}`;
 
@@ -70,6 +75,13 @@ export class AgentBrowser extends EventEmitter {
     cdp.on("Page.screencastFrame", ({ data, sessionId: frameId }: { data: string; sessionId: number }) => {
       const frame: AgentFrame = { sessionId, env, ts: new Date().toISOString(), jpeg: data, ...t.step };
       t.last = frame;
+      if (t.step?.scenarioId && t.step.step !== "done") {
+        const k = `${sessionId}/${env}/${t.step.scenarioId}`;
+        const list = this.recordings.get(k) ?? [];
+        list.push(frame);
+        if (list.length > REPLAY_FRAMES) list.splice(0, list.length - REPLAY_FRAMES);
+        this.recordings.set(k, list);
+      }
       this.emit("frame", frame);
       cdp.send("Page.screencastFrameAck", { sessionId: frameId }).catch(() => undefined);
     });
@@ -87,11 +99,17 @@ export class AgentBrowser extends EventEmitter {
     return t?.last;
   }
 
+  /** What the agent's browser showed during one scenario on one side (oldest first), for Replay. */
+  recording(sessionId: string, env: Env, scenarioId: string): AgentFrame[] {
+    return this.recordings.get(`${sessionId}/${env}/${scenarioId}`) ?? [];
+  }
+
   has(sessionId: string, env: Env) {
     return this.tabs.has(this.key(sessionId, env));
   }
 
   async closeSession(sessionId: string) {
+    for (const k of [...this.recordings.keys()]) if (k.startsWith(`${sessionId}/`)) this.recordings.delete(k);
     for (const env of ["base", "head"] as const) {
       const k = this.key(sessionId, env);
       const t = this.tabs.get(k);

@@ -129,7 +129,9 @@ export class Executor {
       const orderId = findOrderId(vars);
       if (orderId !== undefined && input.manifest.pages.some((p) => p.startsWith("/orders/"))) {
         const p = await this.o.browser.page(sessionId, env, sb.url).catch(() => undefined);
-        await p?.goto(`/orders/${orderId}`, { timeout: 5000 }).then(() => p.waitForTimeout(400)).catch(() => undefined);
+        await this.o.browser.setStep(sessionId, env, { scenarioId: scenario.id, step: `result: order ${orderId}` });
+        // Long enough to see on the live view (and to land in the Replay), short enough not to slow the run much.
+        await p?.goto(`/orders/${orderId}`, { timeout: 5000 }).then(() => p.waitForTimeout(1500)).catch(() => undefined);
         await p?.screenshot().then((png) => save("screenshot", "screenshot.png", png)).catch(() => undefined);
       }
     }

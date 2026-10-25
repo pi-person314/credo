@@ -74,6 +74,9 @@ export async function viewRoutes(app: FastifyInstance, rt: Runtime) {
     return spec(req.params.id, req.params.scenarioId.replace(/\.spec\.ts$/, ""), reply);
   });
 
+  // Browsers ask for it without the token; answer quietly instead of a 401 in the console.
+  app.get("/favicon.ico", async (_req, reply) => reply.code(204).send());
+
   app.get<{ Params: { id: string }; Querystring: { t?: string } }>("/view/:id", async (req, reply) => {
     const { id } = req.params;
     if (!ok(id, req.query.t)) return deny(reply);
@@ -113,6 +116,14 @@ export async function viewRoutes(app: FastifyInstance, rt: Runtime) {
       diffs: s?.diffs ?? [],
       events: memory.events(id, req.query.after).slice(-60),
     };
+  });
+
+  // Replay: the agent's browser frames recorded during one scenario, per side.
+  app.get<{ Params: { id: string; scenarioId: string }; Querystring: { t?: string } }>("/view/:id/replay/:scenarioId", async (req, reply) => {
+    const { id, scenarioId } = req.params;
+    if (!ok(id, req.query.t)) return deny(reply);
+    const side = (env: "base" | "head") => browser.recording(id, env, scenarioId).map((f) => ({ ts: f.ts, step: f.step, jpeg: f.jpeg }));
+    return reply.header("cache-control", "no-store").send({ scenarioId, base: side("base"), head: side("head") });
   });
 
   app.post<{ Params: { id: string }; Querystring: { t?: string } }>("/view/:id/knobs", async (req, reply) => {

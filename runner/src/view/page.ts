@@ -100,7 +100,7 @@ input[type=number] { width: 84px; }
 .compare { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: stretch; }
 .score { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; min-width: 0; }
 .score .lbl { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
-.score .val { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.score .val { font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
 .score .sub { font-size: 12px; color: var(--muted); }
 .verdict { display: grid; place-items: center; padding: 6px 12px; border-radius: 6px; font-weight: 700; font-size: 13px; background: var(--chip); color: var(--muted); text-align: center; max-width: 220px; }
 .compare.differ .verdict { background: var(--bad-bg); color: var(--bad); }
@@ -225,7 +225,7 @@ a { color: var(--accent); }
   </div>
 
   <div class="bar drive" id="drive" hidden>
-    <span class="refs">Click or double-click a screen to drive it.</span>
+    <span class="refs">Click or double-click a screen to drive it. <span id="target"></span></span>
     <label><input type="checkbox" id="mirror" checked> Same input on both</label>
     <input id="typetext" placeholder="Type into the focused field" size="22" aria-label="Text to type">
     <button class="btn" id="typebtn">Type</button>
@@ -369,7 +369,7 @@ function connect(env, attempt) {
   let opened = false;
   ws.onopen = () => { if (my !== gen[env]) return; opened = true; attempt = 0; setConn(env, frames[env] ? "live" : "waiting"); paint(); };
   ws.onmessage = (m) => {
-    if (my !== gen[env]) return;
+    if (my !== gen[env] || replaying) return;
     let f; try { f = JSON.parse(m.data); } catch (e) { return; }
     const img = $("img-" + env);
     img.src = "data:image/jpeg;base64," + f.jpeg;
@@ -396,6 +396,41 @@ function retry(env, attempt, my) {
   };
   tick();
 }
+
+// ---------- Replay: play back what the agent's browser showed during one test ----------
+let replaying = false;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function replay(id) {
+  if (replaying) return;
+  let r;
+  try {
+    const res = await fetch(base + "replay/" + encodeURIComponent(id) + q);
+    if (res.status === 403) return expire("link");
+    r = await res.json();
+  } catch (e) { return log("fail", "Replay failed", e.message); }
+  if (!r.base.length && !r.head.length) return log("fail", "Nothing to replay for " + id, "The agent's browser showed nothing during this test (the runner may have restarted since).");
+  if ($("takeover").checked) { $("takeover").checked = false; $("takeover").onchange(); }
+  setMode("watch", true);
+  replaying = true;
+  $("panes").scrollIntoView({ block: "start", behavior: "smooth" });
+  await Promise.all(ENVS.map(async (env) => {
+    const list = r[env];
+    if (!list.length) { $("img-" + env).hidden = true; overlay(env, "<b>Nothing shown on " + NAME[env] + " during this test</b>"); return; }
+    overlay(env, null);
+    setConn(env, "live", "Replay");
+    for (let i = 0; i < list.length; i++) {
+      const f = list[i];
+      $("img-" + env).src = "data:image/jpeg;base64," + f.jpeg; $("img-" + env).hidden = false; frames[env] = true;
+      $("step-" + env).innerHTML = "▶ Replay · <code>" + text(id) + "</code> · " + text(f.step || "") + " (" + (i + 1) + "/" + list.length + ")";
+      const next = list[i + 1];
+      await sleep(next ? Math.min(1500, Math.max(350, new Date(next.ts) - new Date(f.ts))) : 1200);
+    }
+  }));
+  for (const env of ENVS) { $("step-" + env).innerHTML = "Replay finished · <code>" + text(id) + "</code>"; setConn(env, conn[env] === "off" ? "off" : "waiting"); }
+  replaying = false;
+  paint();
+}
+$("tests").addEventListener("click", (e) => { const a = e.target.closest && e.target.closest("[data-replay]"); if (!a) return; e.preventDefault(); replay(a.dataset.replay); });
 
 // ---------- Try it yourself: the two app previews, with loading / error / retry ----------
 const previewUrl = (env, path) => "/preview/" + encodeURIComponent(BOOT.id) + "/" + env + "/" + encodeURIComponent(BOOT.t) + (path || startPage);
@@ -431,8 +466,17 @@ for (const env of ENVS) {
     if (doc && doc.contentType && doc.contentType.indexOf("text/plain") === 0) return previewFailed(env, (doc.body && doc.body.textContent || "").slice(0, 160) || "The app did not answer.");
     clearTimeout(p.timer); p.state = "loaded"; p.tries = 0; paint();
   });
-  $("reload-" + env).onclick = () => { preview[env].tries = 0; ensurePreview(env, null, true); };
+  $("reload-" + env).onclick = () => { preview[env].tries = 0; ensurePreview(env, framePath(env) || null, true); };
+  frame.addEventListener("load", () => { const path = framePath(env); if (path) { preview[env].want = path; $("open-" + env).href = previewUrl(env, path); } });
   $("ov-" + env).addEventListener("click", (e) => { if (e.target.dataset && e.target.dataset.retry) $("reload-" + env).click(); });
+}
+
+/** The app page the preview is showing (same origin), without the /preview/... prefix. */
+function framePath(env) {
+  try {
+    const l = $("frame-" + env).contentWindow.location, pre = "/preview/" + encodeURIComponent(BOOT.id) + "/" + env + "/" + encodeURIComponent(BOOT.t);
+    return l.pathname.indexOf(pre) === 0 ? (l.pathname.slice(pre.length) || "/") + l.search : null;
+  } catch (e) { return null; }
 }
 
 // ---------- take over the agent's browser (watch mode) ----------
@@ -444,18 +488,27 @@ $("takeover").onchange = () => {
   // No picture yet (e.g. the runner restarted since the run): open the app so there is something to drive.
   if (on && !(state && state.busy)) for (const env of ENVS) if (!frames[env] && healthy(env)) post("input", { env, action: "goto", path: startPage }).catch((e) => log("fail", "Take over failed", e.message));
 };
+function paintTarget() { $("target").textContent = $("mirror").checked ? "Typing goes to both." : "Typing goes to " + NAME[lastEnv] + "."; }
 async function drive(env, body) {
-  lastEnv = env; touched = true;
+  lastEnv = env; touched = true; paintTarget();
   try { await post("input", Object.assign({ env: $("mirror").checked ? "both" : env }, body)); } catch (e) { log("fail", "Take over failed", e.message); }
 }
 for (const env of ENVS) {
   const img = $("img-" + env);
-  const at = (e) => { const r = img.getBoundingClientRect(); return { x: Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), y: Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) }; };
+  const at = (e) => {
+    // The frame is drawn with object-fit: contain, so find the picture inside the box before scaling.
+    const r = img.getBoundingClientRect(), nw = img.naturalWidth || 1000, nh = img.naturalHeight || 720;
+    const k = Math.min(r.width / nw, r.height / nh), w = nw * k, h = nh * k;
+    const left = r.left + (r.width - w) / 2, top = r.top + (r.height - h) / 2;
+    return { x: Math.min(1, Math.max(0, (e.clientX - left) / w)), y: Math.min(1, Math.max(0, (e.clientY - top) / h)) };
+  };
   let timer;
   img.addEventListener("click", (e) => { if (!$("takeover").checked) return; clearTimeout(timer); const p = at(e); timer = setTimeout(() => drive(env, Object.assign({ action: "click" }, p)), 250); });
   img.addEventListener("dblclick", (e) => { if (!$("takeover").checked) return; clearTimeout(timer); drive(env, Object.assign({ action: "dblclick" }, at(e))); });
   img.addEventListener("wheel", (e) => { if (!$("takeover").checked) return; e.preventDefault(); drive(env, { action: "scroll", dy: e.deltaY }); }, { passive: false });
 }
+$("mirror").onchange = paintTarget;
+paintTarget();
 $("typebtn").onclick = () => drive(lastEnv, { action: "type", text: $("typetext").value });
 $("typetext").onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); $("typebtn").click(); } };
 $("enterbtn").onclick = () => drive(lastEnv, { action: "press", key: "Enter" });
@@ -465,7 +518,7 @@ $("homebtn").onclick = () => drive(lastEnv, { action: "goto", path: startPage })
 async function busy(btn, label, fn) {
   const old = btn.innerHTML;
   btn.disabled = true; btn.innerHTML = "<span class='spin' aria-hidden='true'></span>" + text(label);
-  try { return await fn(); } finally { btn.innerHTML = old; btn.disabled = false; paint(); }
+  try { return await fn(); } finally { btn.innerHTML = old; btn.disabled = false; paint(); paintKnobs(); }
 }
 
 // ---------- knobs + reset: pending / applied / error, current value from state ----------
@@ -483,7 +536,7 @@ $("latency").oninput = () => { $("knob-note").textContent = ""; paintKnobs(); };
 $("apply").onclick = () => busy($("apply"), "Applying…", async () => {
   const body = { provider: $("provider").value, latencyMs: Math.max(0, Math.min(30000, Number($("latency").value) || 0)) };
   knobNote("", "Applying to both sandboxes…", true);
-  try { await post("knobs", body); if (state) state.knobs = body; knobNote("ok", "Applied to both: " + knobsLabel(body)); log("you", "You changed the failure knobs", knobsLabel(body) + " on both"); }
+  try { await post("knobs", body); if (state) state.knobs = body; $("latency").value = body.latencyMs; knobNote("ok", "Applied to both: " + knobsLabel(body)); }
   catch (e) { knobNote("bad", "Not applied: " + e.message, true); }
 });
 $("reset").onclick = () => busy($("reset"), "Resetting…", async () => {
@@ -496,7 +549,6 @@ $("reset").onclick = () => busy($("reset"), "Resetting…", async () => {
     if (state) state.latest = {};
     touched = false; latestSig = null;
     knobNote("ok", "Both sandboxes reset, provider ok");
-    log("you", "You reset both sandboxes", "Fresh data, provider ok");
     for (const env of ENVS) if (preview[env].state !== "idle") ensurePreview(env, startPage, true);
   } catch (e) { knobNote("bad", "Reset failed: " + e.message, true); }
 });
@@ -604,7 +656,7 @@ function paint() {
     $("score-val-" + env).textContent = pending[env] ? "Working…" : !healthy(env) ? sbWords(env) : !o ? "No order yet" : "Order #" + o.orderId + " · " + (o.status || "?") + " · " + plural(o.charges, "charge");
     $("score-val-" + env).title = o ? "The newest order on " + NAME[env] + ", however it was made" : "";
     $("score-sub-" + env).textContent = o && c.orders != null ? "Newest of " + plural(c.orders, "order") + " on this side" : "Pay twice on both, or click in the app below";
-    $("res-" + env).textContent = pending[env] ? "Working…" : r ? summary(r) : "";
+    $("res-" + env).textContent = pending[env] ? "Working…" : r && (r.error || !o || o.orderId === String(r.orderId)) ? summary(r) : "";
     $("res-" + env).title = r ? summary(r) : "";
     $("act-" + env).hidden = !(s && s.quickActions) || !!gone;
     document.querySelectorAll("[data-env='" + env + "']").forEach((b) => { if (!b.querySelector(".spin")) b.disabled = !canAct(); });
@@ -618,8 +670,9 @@ function paint() {
   if (!touched) v = "Pay twice on both to compare";
   else if (a && b && unpaid(a) && unpaid(b)) v = "Now pay on both sides";
   else if (a && b && (unpaid(a) || unpaid(b))) v = "Now pay on the " + (unpaid(a) ? "base" : "PR") + " side too";
+  else if (a && b && (a.status || "") !== (b.status || "")) v = "base ended " + (a.status || "?") + ", PR ended " + (b.status || "?") + ": run the same thing on both to compare";
   else if (a && b) {
-    const diff = a.charges !== b.charges || (a.status || "") !== (b.status || "");
+    const diff = a.charges !== b.charges;
     k = diff ? "differ" : "same";
     v = diff ? "Different! base " + plural(a.charges, "charge") + ", PR " + plural(b.charges, "charge") : "Same on both: " + (a.status || "?") + ", " + plural(a.charges, "charge");
   } else if ((results.base && results.base.error) || (results.head && results.head.error)) v = "One side failed: see the timeline";
@@ -675,7 +728,7 @@ function render(s) {
   const diffs = new Map(s.diffs.map((d) => [d.scenarioId, d]));
   $("tests").innerHTML = s.scenarios.length ? s.scenarios.map((sc) => {
     const d = diffs.get(sc.id);
-    return "<tr><td><div>" + text(sc.objective) + "</div><div class='refs'>" + text(sc.id) + (sc.origin !== "planner" ? " · " + text(sc.origin) : "") + " · " + text(sc.sourceRefs.join(" ")) + " · <a href='" + base + "spec/" + encodeURIComponent(sc.id) + ".spec.ts" + q + "'>.spec.ts</a></div></td>" +
+    return "<tr><td><div>" + text(sc.objective) + "</div><div class='refs'>" + text(sc.id) + (sc.origin !== "planner" ? " · " + text(sc.origin) : "") + " · " + text(sc.sourceRefs.join(" ")) + " · <a href='" + base + "spec/" + encodeURIComponent(sc.id) + ".spec.ts" + q + "'>.spec.ts</a> · <a href='#' data-replay='" + text(sc.id) + "' title='Play back what the agent's browser showed during this test'>▶ Replay</a></div></td>" +
       "<td class='res " + (d ? d.base : "") + "'>" + (d ? d.base : "…") + "</td><td class='res " + (d ? d.head : "") + "'>" + (d ? d.head : "…") + "</td>" +
       "<td><span class='cls " + (d ? d.classification : "RUNNING") + "'>" + (d ? d.classification.replace(/_/g, " ") : "running") + "</span></td></tr>";
   }).join("") : "<tr><td colspan='4' class='refs'>No tests yet.</td></tr>";
