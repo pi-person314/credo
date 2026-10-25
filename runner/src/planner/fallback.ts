@@ -44,12 +44,24 @@ export function templateAsk(prompt: string, issueKey: string, manifest: AppManif
     };
   }
   if (/error|500|fail|declin/.test(p)) {
+    // AC2 is "retries after a provider error succeed": fail, recover the provider, retry, and prove the order got paid once.
     return {
       ...base,
-      id: id("error_no_charge"),
+      id: id("error_then_retry"),
       knobs: { provider: "error", latencyMs: 0 },
-      steps: [order(), pay("first")],
-      assertions: [charges("a1", 0), { id: "a2", type: "http_status", ref: "first", equals: 502 }],
+      steps: [
+        order(),
+        pay("first"),
+        { op: "http", method: "POST", path: "/__test/provider", body: { mode: "ok", latencyMs: 0 } },
+        pay("retry"),
+        { op: "http", method: "GET", path: "/api/orders/$order.id", saveAs: "final" },
+      ],
+      assertions: [
+        { id: "a1", type: "http_status", ref: "first", equals: 502 },
+        { id: "a2", type: "http_status", ref: "retry", equals: 200 },
+        { id: "a3", type: "json_path", ref: "final", path: "status", equals: "paid" },
+        charges("a4", 1),
+      ],
       sourceRefs: [acRef(issueKey, 2)],
     };
   }

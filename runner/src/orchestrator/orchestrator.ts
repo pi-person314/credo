@@ -182,7 +182,7 @@ export class Orchestrator {
     s.status = "PLANNING";
     const acs = context.jira?.acceptanceCriteria.length ?? 0;
     await s.emit("planner", "planner.started", "start", `Planning from ${acs} acceptance criteria, ${context.findings.length} findings, ${context.changedFiles.length} files`);
-    const plan = await this.d.planner.plan(context);
+    const plan = await this.d.planner.plan(context, s.startedAt + BUDGETS.firstReportMs);
     await s.emit("planner", "planner.scenarios", plan.scenarios.length ? "ok" : "fail", `${plan.scenarios.length} scenarios (${plan.source})`, plan.scenarios);
     if (!plan.scenarios.length) throw new Error(`planner produced no scenarios: ${plan.errors.slice(-2).join("; ")}`);
 
