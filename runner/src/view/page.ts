@@ -10,7 +10,7 @@ export function viewPage(sessionId: string, token: string): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Live sandbox</title>
+<title>Credo · Live sandbox</title>
 <style>
 :root {
   --bg: #f7f8fa; --card: #ffffff; --text: #172b4d; --muted: #626f86; --line: #dcdfe4;

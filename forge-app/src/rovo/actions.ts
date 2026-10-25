@@ -42,7 +42,7 @@ export async function rovoAskTest(payload: Payload) {
   if (!s.id) return s;
   const res = await actions.askTest(s.id, payload.prompt);
   return res.ok
-    ? { issueKey: s.issueKey, queued: true, askId: res.ask.id, note: "Runs on base and PR; the result appears in the PR Confidence panel." }
+    ? { issueKey: s.issueKey, queued: true, askId: res.ask.id, note: "Runs on base and PR; the result appears in the Credo panel." }
     : { issueKey: s.issueKey, queued: false, error: res.error };
 }
 
