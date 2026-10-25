@@ -18,7 +18,9 @@ export function isVagueAsk(prompt: string): boolean {
 // ---------- what broke ----------
 
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
-const show = (v: unknown) => clip(typeof v === "string" ? `"${v}"` : JSON.stringify(v) ?? "nothing", 80);
+// Observed page text can hold newlines/tabs; Jira rejects a Bug summary with a newline, so flatten whitespace.
+const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
+const show = (v: unknown) => clip(typeof v === "string" ? `"${oneLine(v)}"` : JSON.stringify(v) ?? "nothing", 80);
 const whereText = (where: Record<string, unknown>) =>
   Object.entries(where)
     .map(([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`)
