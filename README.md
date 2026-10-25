@@ -2,8 +2,6 @@
 
 **Merge with confidence.** Credo is an AI agent that lives inside Jira and proves whether a pull request does what its ticket asks, before anyone merges it.
 
-Built for Cal Hacks, Atlassian Agentic Workforce Challenge, Track 1: *Agents that do the work*.
-
 ## The problem
 
 Coding agents open pull requests faster than people can review them. A diff can look harmless and still break the one thing the ticket cared about. Code review reads the change, but nobody runs it against the acceptance criteria. That QA pass, the repro and the bug report are still manual work.
