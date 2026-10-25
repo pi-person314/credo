@@ -16,6 +16,19 @@ export type QuickAction = z.infer<typeof QuickAction>;
 /** "race" sets these knobs on both sides first, so two overlapping pays really overlap. */
 export const RACE_KNOBS: Knobs = { provider: "slow", latencyMs: 800 };
 
+/**
+ * Runs `fn` with RACE_KNOBS on both sides, then puts the knobs the reviewer had back, even if `fn` fails,
+ * so "Pay twice on both" does not leave the provider slow for whatever they try next.
+ */
+export async function withRaceKnobs<T>(set: (k: Knobs) => Promise<void>, before: Knobs, fn: (k: Knobs) => Promise<T>): Promise<T> {
+  await set(RACE_KNOBS);
+  try {
+    return await fn(RACE_KNOBS);
+  } finally {
+    if (before.provider !== RACE_KNOBS.provider || before.latencyMs !== RACE_KNOBS.latencyMs) await set(before).catch(() => undefined);
+  }
+}
+
 export interface SideResult {
   env: Env;
   action: QuickAction["action"];

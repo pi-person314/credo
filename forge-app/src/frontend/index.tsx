@@ -91,7 +91,19 @@ const App = () => {
   const onKnobs = async (k: Knobs) => {
     await act(() => api.setKnobs(id, k), `Provider set to ${k.provider} (${k.latencyMs} ms) on both sandboxes.`);
   };
-  const onAsk = (prompt: string) => act(() => api.ask(id, prompt), "Test requested. It will show up under Tests.");
+  // Ask refusals (e.g. a vague request) show under the ask box, not as a notice at the top.
+  const onAsk = async (prompt: string) => {
+    try {
+      await api.ask(id, prompt);
+      setNotice({ kind: "success", text: "Test requested. It will show up under Tests." });
+      kick();
+      return null;
+    } catch (e) {
+      const text = api.errorText(e);
+      if (isRunnerGone(text)) setGone({ id, at: events.length });
+      return text;
+    }
+  };
   const onFileBug = (scenarioId: string) => act(() => api.fileBug(id, scenarioId), "Bug filed and linked to this issue.");
   const onMoveBack = () => act(() => api.approveTransition(id), "Issue moved back to In Progress.");
 

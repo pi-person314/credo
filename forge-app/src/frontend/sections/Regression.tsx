@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Button, Inline, SectionMessage, Stack, Text } from "@forge/react";
 import type { SessionDetail } from "../../contracts";
-import { regressionHeadline } from "../../lib/honest";
+import { groupRegressions } from "../../lib/honest";
 import { hasRegression, regressions, scenarioName } from "../ui";
 
 type Props = {
@@ -29,23 +29,30 @@ export const Regression = ({ detail, onFileBug, onMoveBack }: Props) => {
   return (
     <SectionMessage appearance="error" title="New regression found">
       <Stack space="space.100">
-        {regressions(detail).map((id) => (
-          <Inline key={id} space="space.100" alignBlock="center" spread="space-between">
-            <Stack space="space.025">
-              <Text weight="bold">{regressionHeadline(detail.scenarios.find((s) => s.id === id), detail.runs, id)}</Text>
-              <Text size="small">
-                {id}: {scenarioName(detail, id)}
-              </Text>
-            </Stack>
-            <Button
-              appearance="danger"
-              onClick={() => run(id, () => onFileBug(id))}
-              isDisabled={busy !== null || filedFor(detail, id)}
-            >
-              {filedFor(detail, id) ? "Bug filed" : busy === id ? "Filing…" : "File Bug"}
-            </Button>
-          </Inline>
-        ))}
+        {/* Scenarios failing the same check share a row. File Bug files for the first one; "Bug filed" if any has a Bug. */}
+        {groupRegressions(detail.scenarios, detail.runs, regressions(detail)).map((g) => {
+          const id = g.ids[0]!;
+          const filed = g.ids.some((x) => filedFor(detail, x));
+          return (
+            <Inline key={id} space="space.100" alignBlock="center" spread="space-between">
+              <Stack space="space.025">
+                <Text weight="bold">{g.headline}</Text>
+                {g.ids.length > 1 ? (
+                  <Text size="small">
+                    {`Seen in ${g.ids.length} scenarios: ${g.ids.map((x) => `${x} (${scenarioName(detail, x)})`).join("; ")}`}
+                  </Text>
+                ) : (
+                  <Text size="small">
+                    {id}: {scenarioName(detail, id)}
+                  </Text>
+                )}
+              </Stack>
+              <Button appearance="danger" onClick={() => run(id, () => onFileBug(id))} isDisabled={busy !== null || filed}>
+                {filed ? "Bug filed" : busy === id ? "Filing…" : "File Bug"}
+              </Button>
+            </Inline>
+          );
+        })}
         <Inline>
           <Button onClick={() => run("move", onMoveBack)} isDisabled={busy !== null || movedBack(detail)}>
             {movedBack(detail) ? "Moved to In Progress" : busy === "move" ? "Moving…" : "Move back to In Progress"}
