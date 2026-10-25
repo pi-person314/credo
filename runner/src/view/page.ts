@@ -620,6 +620,10 @@ function render(s) {
   if (s.title) $("title").textContent = s.title;
   if (s.startPage) startPage = s.startPage;
   if (first && !modeChosen) setMode(s.busy || s.status === "RUNNING" || s.status === "PLANNING" || !s.quickActions ? "watch" : "try");
+  // Watch the agent / take over only show something while the agent is testing. Otherwise hide them and show the two apps.
+  const agentActive = s.busy || s.status === "RUNNING" || s.status === "PLANNING";
+  $("tab-watch").hidden = !agentActive && !!s.quickActions;
+  if ($("tab-watch").hidden && mode === "watch") setMode("try");
   const editing = document.activeElement === $("latency") || document.activeElement === $("provider") || $("knob-note").textContent;
   if (s.knobs && !editing) { $("provider").value = s.knobs.provider; $("latency").value = s.knobs.latencyMs; }
   paintKnobs();
