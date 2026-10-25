@@ -4,7 +4,7 @@ import { fetch } from "@forge/api";
 // GITHUB_TOKEN is a Forge variable: forge variables set --encrypt GITHUB_TOKEN <value>
 // Without it every call returns undefined and logs, so Jira publishing still works.
 const API = "https://api.github.com";
-export const STATUS_CONTEXT = "PR Confidence";
+export const STATUS_CONTEXT = "Credo";
 
 export type StatusState = "error" | "failure" | "pending" | "success";
 
