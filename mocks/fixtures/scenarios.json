@@ -137,5 +137,91 @@
       "jira:PAY-5#ac1",
       "greptile:c_8812"
     ]
+  },
+  {
+    "id": "sc_error_then_retry_succeeds",
+    "objective": "After a provider error, a retry pays the order with exactly 1 charge",
+    "origin": "planner",
+    "priority": "P1",
+    "fixture": "cart_one_item",
+    "knobs": {
+      "provider": "error",
+      "latencyMs": 0
+    },
+    "steps": [
+      {
+        "op": "http",
+        "method": "POST",
+        "path": "/api/orders",
+        "saveAs": "order"
+      },
+      {
+        "op": "http",
+        "method": "POST",
+        "path": "/api/pay",
+        "body": {
+          "orderId": "$order.id"
+        },
+        "saveAs": "failed"
+      },
+      {
+        "op": "http",
+        "method": "POST",
+        "path": "/__test/provider",
+        "body": {
+          "mode": "ok",
+          "latencyMs": 0
+        }
+      },
+      {
+        "op": "http",
+        "method": "POST",
+        "path": "/api/pay",
+        "body": {
+          "orderId": "$order.id"
+        },
+        "saveAs": "retry"
+      },
+      {
+        "op": "http",
+        "method": "GET",
+        "path": "/api/orders/$order.id",
+        "saveAs": "final"
+      }
+    ],
+    "assertions": [
+      {
+        "id": "a1",
+        "type": "http_status",
+        "ref": "failed",
+        "equals": 502
+      },
+      {
+        "id": "a2",
+        "type": "http_status",
+        "ref": "retry",
+        "equals": 200
+      },
+      {
+        "id": "a3",
+        "type": "json_path",
+        "ref": "final",
+        "path": "status",
+        "equals": "paid"
+      },
+      {
+        "id": "a4",
+        "type": "db_count",
+        "table": "charges",
+        "where": {
+          "orderId": "$order.id"
+        },
+        "equals": 1
+      }
+    ],
+    "rationale": "AC2 is a success criterion: the provider recovers mid-scenario and the retry must end paid with one charge",
+    "sourceRefs": [
+      "jira:PAY-5#ac2"
+    ]
   }
 ]
