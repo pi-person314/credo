@@ -426,7 +426,7 @@ async function replay(id) {
       await sleep(next ? Math.min(1500, Math.max(350, new Date(next.ts) - new Date(f.ts))) : 1200);
     }
   }));
-  for (const env of ENVS) { $("step-" + env).innerHTML = "Replay finished · <code>" + text(id) + "</code>"; setConn(env, conn[env] === "off" ? "off" : "waiting"); }
+  for (const env of ENVS) { $("step-" + env).innerHTML = "Replay finished · <code>" + text(id) + "</code>"; setConn(env, conn[env] === "off" ? "off" : "live"); }
   replaying = false;
   paint();
 }
@@ -728,7 +728,7 @@ function render(s) {
   const diffs = new Map(s.diffs.map((d) => [d.scenarioId, d]));
   $("tests").innerHTML = s.scenarios.length ? s.scenarios.map((sc) => {
     const d = diffs.get(sc.id);
-    return "<tr><td><div>" + text(sc.objective) + "</div><div class='refs'>" + text(sc.id) + (sc.origin !== "planner" ? " · " + text(sc.origin) : "") + " · " + text(sc.sourceRefs.join(" ")) + " · <a href='" + base + "spec/" + encodeURIComponent(sc.id) + ".spec.ts" + q + "'>.spec.ts</a> · <a href='#' data-replay='" + text(sc.id) + "' title='Play back what the agent's browser showed during this test'>▶ Replay</a></div></td>" +
+    return "<tr><td><div>" + text(sc.objective) + "</div><div class='refs'>" + text(sc.id) + (sc.origin !== "planner" ? " · " + text(sc.origin) : "") + " · " + text(sc.sourceRefs.join(" ")) + " · <a href='" + base + "spec/" + encodeURIComponent(sc.id) + ".spec.ts" + q + "'>.spec.ts</a> · <a href='#' data-replay='" + text(sc.id) + "' title='Play back what the agent&#39;s browser showed during this test'>▶ Replay</a></div></td>" +
       "<td class='res " + (d ? d.base : "") + "'>" + (d ? d.base : "…") + "</td><td class='res " + (d ? d.head : "") + "'>" + (d ? d.head : "…") + "</td>" +
       "<td><span class='cls " + (d ? d.classification : "RUNNING") + "'>" + (d ? d.classification.replace(/_/g, " ") : "running") + "</span></td></tr>";
   }).join("") : "<tr><td colspan='4' class='refs'>No tests yet.</td></tr>";
