@@ -98,3 +98,18 @@ describe("backoffMs", () => {
     expect([1, 2, 3, 4, 10].map(backoffMs)).toEqual([2_000, 4_000, 8_000, 16_000, 60_000]);
   });
 });
+
+describe("teardown while an ask is in flight", () => {
+  it("marks the planning ask and the queued ones as not run and clears busy", () => {
+    const asks = [ask("ask_1", 0), ask("ask_2", 0)];
+    const events = [
+      ev("session.complete", "ok"),
+      ev("planner.started", "start", "Planning ask", { askId: "ask_1" }),
+      ev("sandbox.teardown", "ok", "Runner restarted: sandboxes removed"),
+    ];
+    const r = progress(input("READY", asks), events);
+    expect(r.asks.get("ask_1")).toEqual({ kind: "failed", reason: "Not run: Runner restarted: sandboxes removed" });
+    expect(r.asks.get("ask_2")).toEqual({ kind: "failed", reason: "Not run: Runner restarted: sandboxes removed" });
+    expect(r.busy).toBeNull();
+  });
+});

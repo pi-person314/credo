@@ -50,6 +50,15 @@ export function progress(d: Input, events: Event[]): { asks: Map<string, AskStat
         current = undefined;
         pipelineDone = true;
         break;
+      case "sandbox.teardown": {
+        // The runner forgot the session: whatever was planning/running and every ask still waiting won't finish.
+        const reason = `Not run: ${e.message || "sandboxes shut down"}`;
+        if (current) states.set(current, { kind: "failed", reason });
+        for (const a of d.asks) if (!states.has(a.id) && a.createdAt <= e.ts) states.set(a.id, { kind: "failed", reason });
+        current = undefined;
+        pipelineDone = true;
+        break;
+      }
       case "ask.received":
         if (askId && e.status === "fail") states.set(askId, { kind: "failed", reason: e.message });
         break;
@@ -87,7 +96,7 @@ export function progress(d: Input, events: Event[]): { asks: Map<string, AskStat
   const running = current ? states.get(current) : undefined;
   const now = running?.kind === "planning" ? "Busy: planning ask" : running?.kind === "running" ? "Busy: running ask" : pipelineBusy ? (PIPELINE_BUSY[d.session.status] ?? "Busy") : waiting.length ? "Busy: starting ask" : null;
   const busy = now && waiting.length && (current || pipelineBusy) ? `${now} · ${waiting.length} queued` : now;
-  return { asks: states, busy };
+  return { asks: states, busy: sandboxesExpired(events).expired ? null : busy };
 }
 
 export function askLabel(s: AskState): string {

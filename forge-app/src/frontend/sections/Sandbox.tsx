@@ -5,7 +5,7 @@ import type { Knobs, ProviderMode } from "../../contracts";
 type Props = {
   viewUrl: string | null;
   disabled: boolean;
-  /** Set when the runner tore the sandboxes down: the reason it gave, if any. */
+  /** Set when the runner tore the sandboxes down (reason = what it said, e.g. "Idle for 30 min: ...") or forgot the session (no reason). */
   expired: { reason?: string } | null;
   onKnobs: (k: Knobs) => Promise<void>;
   onReset: () => void;
@@ -34,8 +34,8 @@ export const Sandbox = ({ viewUrl, disabled, expired, onKnobs, onReset }: Props)
       <Stack space="space.200">
         <SectionMessage appearance="information" title="Sandboxes are shut down">
           <Stack space="space.050">
-            <Text>Sandboxes shut down after 30 min idle. Push a commit to the PR to start a fresh run.</Text>
-            {expired.reason ? <Text size="small">Runner said: {expired.reason}</Text> : null}
+            <Text>{expired.reason ?? "The runner no longer has this session (it may have restarted)."}</Text>
+            <Text size="small">Push a commit to the PR to start a fresh run.</Text>
           </Stack>
         </SectionMessage>
         {viewUrl ? (
