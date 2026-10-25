@@ -17,7 +17,8 @@ const action = (key: string, payload: Record<string, unknown>) =>
 export type PanelDetail = SessionDetail & { ingest?: IngestSummary };
 
 export const getSession = (issueKey?: string) =>
-  invoke<PanelDetail | null>("getSession", { issueKey }).then((d) => (d as PanelDetail | null) ?? null);
+  // No run for the issue can come back as null or as an empty object: both mean the empty pre-run panel.
+  invoke<PanelDetail | null>("getSession", { issueKey }).then((d) => ((d as PanelDetail | null)?.session ? (d as PanelDetail) : null));
 
 export const getEvents = (sessionId: string, after?: string) =>
   invoke<Event[]>("getEvents", { sessionId, after }).then((e) => (Array.isArray(e) ? (e as Event[]) : []));

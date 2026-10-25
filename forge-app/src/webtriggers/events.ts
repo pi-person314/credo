@@ -4,7 +4,7 @@ import { kvs } from "@forge/kvs";
 import { Event, TOKEN_HEADER } from "../contracts/index";
 import { header, respond } from "../lib/http";
 import { projectEvents } from "../lib/state";
-import { appendEvents } from "../lib/store";
+import { appendEvents, keys } from "../lib/store";
 
 const reportQueue = new Queue({ key: "report" });
 
@@ -19,6 +19,13 @@ export async function runnerEvents(req: WebTriggerRequest) {
   let events: Event[];
   try {
     const raw = JSON.parse(req.body);
+    // Demo reset: unlink an issue from its run so the panel shows the empty pre-run state. The session's
+    // own records and the audit trail stay in KVS; a new run for the issue links itself again.
+    if (raw && raw.admin === "clear_issue" && typeof raw.issueKey === "string" && /^[A-Z][A-Z0-9]+-\d+$/.test(raw.issueKey)) {
+      const was = await kvs.get<string>(keys.issue(raw.issueKey));
+      await kvs.delete(keys.issue(raw.issueKey));
+      return respond(200, { ok: true, issueKey: raw.issueKey, unlinkedSession: was ?? null });
+    }
     events = (Array.isArray(raw) ? raw : [raw]).map((e: unknown) => Event.parse(e));
   } catch {
     return respond(400, { error: "bad event body" });
