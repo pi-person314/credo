@@ -6,6 +6,7 @@
   "main": "src/index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "test": "../node_modules/.bin/vitest run --root .",
     "deploy": "forge deploy",
     "tunnel": "forge tunnel",
     "lint": "forge lint"
