@@ -12,6 +12,9 @@ export interface PlanResult {
   errors: string[];
 }
 
+/** A coverage-only retry costs one more Droid call (up to ~120 s): skip it when less than this is left of the budget. */
+export const COVERAGE_RETRY_MIN_MS = 150_000;
+
 /** Paths that can't change runtime behavior: docs, tests, CI config. */
 const STATIC = /(^|\/)(docs?|test|tests|__tests__|\.github)\/|\.(md|mdx|txt|rst)$|\.test\.[jt]sx?$|\.spec\.[jt]sx?$|(^|\/)(LICENSE|CODEOWNERS)$/i;
 
@@ -29,7 +32,14 @@ export class Planner {
 
   constructor(private llm: Llm, private log: (msg: string) => void = () => undefined) {}
 
-  private async generate(prompt: string, context: Context, origin: Origin, max: number, takenIds: string[]): Promise<PlanResult | undefined> {
+  private async generate(
+    prompt: string,
+    context: Context,
+    origin: Origin,
+    max: number,
+    takenIds: string[],
+    deadline?: number,
+  ): Promise<PlanResult | undefined> {
     if (!this.llm.available()) return undefined;
     const errors: string[] = [];
     const acceptanceCriteria = context.jira?.acceptanceCriteria ?? [];
@@ -45,6 +55,11 @@ export class Planner {
         if (v.scenarios.length > 0 && (attempt === 2 || v.coverageErrors.length === 0)) return { scenarios: v.scenarios, source, errors };
         if (v.scenarios.length > 0) {
           firstTry = v.scenarios;
+          // The false claims are already dropped; only spend a second Droid call if the first report can still make it.
+          if (deadline !== undefined && deadline - Date.now() < COVERAGE_RETRY_MIN_MS) {
+            this.log(`planner over-claimed success criteria, no time to ask again (claims dropped): ${v.coverageErrors.join(" | ")}`);
+            return { scenarios: firstTry, source, errors };
+          }
           this.log(`planner over-claimed success criteria, asking again: ${v.coverageErrors.join(" | ")}`);
         }
         current = retryPrompt(prompt, v.errors.length ? v.errors : ["no scenarios"]);
@@ -60,9 +75,10 @@ export class Planner {
     return { scenarios: [], source: this.llm.name, errors };
   }
 
-  async plan(context: Context): Promise<PlanResult> {
+  /** deadline: epoch ms by which the first report should be out (the coverage retry is skipped near it). */
+  async plan(context: Context, deadline?: number): Promise<PlanResult> {
     const max = BUDGETS.maxScenarios - BUDGETS.maxFollowupScenarios;
-    const got = await this.generate(planPrompt(context, max), context, "planner", max, context.priorScenarioIds);
+    const got = await this.generate(planPrompt(context, max), context, "planner", max, context.priorScenarioIds, deadline);
     if (got?.scenarios.length) return got;
     const canned = cannedScenarios(context.session.issueKey, context.manifest).filter((s) => !context.priorScenarioIds.includes(s.id));
     return { scenarios: canned.slice(0, max), source: "canned", errors: got?.errors ?? ["planner not configured (FACTORY_API_KEY)"] };

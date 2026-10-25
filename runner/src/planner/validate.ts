@@ -28,24 +28,46 @@ export function isPositive(a: Assertion): boolean {
   }
 }
 
-/** The provider mode after the last step: the scenario's knobs, then any POST /__test/provider steps in order. */
-function finalProvider(s: Scenario): ProviderMode {
-  let mode: ProviderMode = s.knobs?.provider ?? "ok";
-  for (const st of s.steps) {
+/** Provider modes over the scenario: the knobs, then each POST /__test/provider step (with its step index). */
+function providerSwitches(s: Scenario): { modes: ProviderMode[]; lastSwitch: number } {
+  const modes: ProviderMode[] = [s.knobs?.provider ?? "ok"];
+  let lastSwitch = -1;
+  s.steps.forEach((st, i) => {
     const body = st.op === "http" && st.path === PROVIDER_HOOK ? (st.body as { mode?: ProviderMode } | undefined) : undefined;
-    if (body?.mode) mode = body.mode;
-  }
-  return mode;
+    if (body?.mode) {
+      modes.push(body.mode);
+      lastSwitch = i;
+    }
+  });
+  return { modes, lastSwitch };
 }
 
-/** Why scenario s can't verify success criterion ac, or undefined when it can. */
-function successGap(s: Scenario): string | undefined {
+/** Criteria about recovering from a failure ("retries after a provider error succeed") need the failure to happen. */
+const RECOVERY_AC = /\b(error|errors|timeout|times? ?out|timed.?out|retr(y|ies|ied)|fail(s|ed|ure)?)\b/i;
+const FAILING: ProviderMode[] = ["error", "timeout"];
+
+/**
+ * Why scenario s can't verify success criterion ac, or undefined when it can. A positive http_status/json_path only
+ * counts when its ref was saved after the last provider switch; db_count and ui_text are end-state checks.
+ */
+function successGap(s: Scenario, ac: string): string | undefined {
   if (!s.assertions.some(isPositive)) {
     return "only asserts failure behavior; add a positive end state (e.g. retry http_status 200, GET /api/orders/$order.id status \"paid\", exactly 1 charge)";
   }
-  const mode = finalProvider(s);
-  if (mode === "error" || mode === "timeout") {
+  const { modes, lastSwitch } = providerSwitches(s);
+  const mode = modes[modes.length - 1]!;
+  if (FAILING.includes(mode)) {
     return `provider is still "${mode}" at the end, so nothing can succeed; add {"op":"http","method":"POST","path":"${PROVIDER_HOOK}","body":{"mode":"ok","latencyMs":0}} before the retry`;
+  }
+  const savedAfter = new Set(
+    s.steps.flatMap((st, i) => (i <= lastSwitch ? [] : st.op === "http" ? [st.saveAs] : st.op === "parallel" ? [st.step.saveAs] : [])).filter(Boolean),
+  );
+  const proves = s.assertions.some(
+    (a) => isPositive(a) && (a.type === "db_count" || a.type === "ui_text" || savedAfter.has(a.ref)),
+  );
+  if (!proves) return `its success checks only cover steps before the provider switched back to "${mode}"; assert on a step saved after it (e.g. the retry)`;
+  if (RECOVERY_AC.test(ac) && !modes.some((m) => FAILING.includes(m))) {
+    return `the criterion is about recovering from a failure but the provider never errors or times out; set knobs.provider to "error" (or "timeout") and switch it back with ${PROVIDER_HOOK} before the retry`;
   }
   return undefined;
 }
@@ -121,14 +143,16 @@ export function validateScenarios(
     }
     // A success criterion only counts as covered by a scenario that can show success: drop the ref otherwise.
     const acs = opts.acceptanceCriteria ?? [];
-    const gap = successGap(s);
-    const dropped = gap
-      ? s.sourceRefs.filter((r) => {
-          const n = Number(r.match(/^jira:[^#]+#ac(\d+)$/)?.[1] ?? 0);
-          return n > 0 && SUCCESS_AC.test(acs[n - 1] ?? "");
-        })
-      : [];
-    if (dropped.length) coverageErrors.push(`${s.id}: mapped to ${dropped.join(", ")} (a success criterion) but ${gap}`);
+    const dropped: string[] = [];
+    for (const r of s.sourceRefs) {
+      const n = Number(r.match(/^jira:[^#]+#ac(\d+)$/)?.[1] ?? 0);
+      const ac = acs[n - 1] ?? "";
+      if (n <= 0 || !SUCCESS_AC.test(ac)) continue;
+      const gap = successGap(s, ac);
+      if (!gap) continue;
+      dropped.push(r);
+      coverageErrors.push(`${s.id}: mapped to ${r} (a success criterion) but ${gap}`);
+    }
     let id = s.id;
     for (let n = 2; taken.has(id); n++) id = `${s.id}_${n}`;
     taken.add(id);

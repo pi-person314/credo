@@ -72,6 +72,22 @@ describe("success criteria need a success assertion", () => {
     expect(v.coverageErrors).toEqual([]);
     expect(v.scenarios[0]!.sourceRefs).toEqual(["jira:PAY-5#ac3"]);
   });
+  it("drops a success criterion from a happy path that never hits a provider error", () => {
+    const happy = { ...canned.find((x: { id: string }) => x.id === "sc_single_pay"), id: "sc_happy", sourceRefs: ["jira:PAY-5#ac2"] };
+    const v = validateScenarios([happy], context.manifest, opts);
+    expect(v.scenarios[0]!.sourceRefs).toEqual([]);
+    expect(v.coverageErrors[0]).toMatch(/sc_happy.*ac2.*never errors or times out/);
+  });
+  it("does not count a success check on a step from before the provider recovered", () => {
+    const early = {
+      ...recovery,
+      id: "sc_early",
+      assertions: [{ id: "a1", type: "http_status", ref: "order", equals: 200 }, { id: "a2", type: "http_status", ref: "retry", equals: 502 }],
+    };
+    const v = validateScenarios([early], context.manifest, opts);
+    expect(v.scenarios[0]!.sourceRefs).toEqual([]);
+    expect(v.coverageErrors[0]).toMatch(/sc_early.*before the provider switched/);
+  });
   it("allows only POST /__test/provider with a manifest mode", () => {
     const hook = (body: unknown, method = "POST") => ({ ...recovery, steps: [recovery.steps[0], { op: "http", method, path: "/__test/provider", body }, recovery.steps[3], recovery.steps[4]] });
     const v = validateScenarios([hook({ mode: "chaos" }), hook({ mode: "ok" }, "GET"), hook({ mode: "ok", latencyMs: -1 })], context.manifest, opts);
@@ -91,6 +107,13 @@ describe("success criteria need a success assertion", () => {
     expect(r.source).toBe("fake (retry)");
     expect(llm.prompts[1]).toMatch(/rejected[\s\S]*sc_retry_after_error.*ac2/);
     expect(r.scenarios.map((s) => s.id)).toContain("sc_error_then_retry_succeeds");
+  });
+  it("Planner skips the coverage retry when the first-report budget is nearly spent", async () => {
+    const llm = fake(JSON.stringify([failureOnly]), JSON.stringify([recovery]));
+    const r = await new Planner(llm).plan(context, Date.now() + 60_000);
+    expect(llm.prompts).toHaveLength(1);
+    expect(r.source).toBe("fake");
+    expect(r.scenarios[0]!.sourceRefs).toEqual(["jira:PAY-5#ac1"]);
   });
   it("Planner keeps the first answer, minus the false claim, when the retry is no better", async () => {
     const r = await new Planner(fake(JSON.stringify([failureOnly]), "nope")).plan(context);
