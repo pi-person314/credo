@@ -276,6 +276,8 @@ const results = { base: null, head: null };
 const conn = { base: "connecting", head: "connecting" };
 const frames = { base: false, head: false };
 const sockets = { base: null, head: null }, gen = { base: 0, head: 0 }, pending = { base: false, head: false };
+// Path the app preview is showing per side (e.g. "/orders/3"), to spot when it isn't the buttons' order.
+const viewing = { base: "", head: "" };
 const preview = { base: { want: null, state: "idle", tries: 0, timer: 0 }, head: { want: null, state: "idle", tries: 0, timer: 0 } };
 
 async function post(path, body) {
@@ -415,6 +417,7 @@ for (const env of ENVS) {
     // Same origin as this page, so a proxy error (plain text 502/503) is visible here.
     let doc; try { doc = frame.contentDocument; } catch (e) {}
     if (doc && doc.contentType && doc.contentType.indexOf("text/plain") === 0) return previewFailed(env, (doc.body && doc.body.textContent || "").slice(0, 160) || "The app did not answer.");
+    try { viewing[env] = frame.contentWindow.location.pathname; } catch (e) { viewing[env] = ""; }
     clearTimeout(p.timer); p.state = "loaded"; p.tries = 0; paint();
   });
   $("reload-" + env).onclick = () => { preview[env].tries = 0; ensurePreview(env, null, true); };
@@ -555,7 +558,7 @@ function paint() {
   $("hero").hidden = !showHero;
   if (showHero) {
     $("race").disabled = !canAct();
-    $("hero-text").textContent = !ready() ? "The sandboxes are starting. This unlocks when both are up." : s.busy ? "The agent is running tests on these sandboxes. This unlocks when it finishes, or watch it below." : "Sets the provider to slow (800 ms), makes a fresh order on each side and clicks Pay twice at once, then puts your knobs back. Compare the charges.";
+    $("hero-text").textContent = !ready() ? "The sandboxes are starting. This unlocks when both are up." : s.busy ? "The agent is running tests on these sandboxes. This unlocks when it finishes, or watch it below." : "Sets the provider to slow (800 ms), makes a fresh order on each side and clicks Pay twice at once, then puts your knobs back. It starts both sides from fresh data, then compare the charges.";
   }
   // per-side scores + diff highlight
   for (const env of ENVS) {
@@ -564,7 +567,9 @@ function paint() {
     $("score-val-" + env).textContent = pending[env] ? "Working…" : !r ? (healthy(env) ? "No order yet" : sbWords(env)) : r.error ? "Error" : (r.status || "order " + r.orderId) + " · " + plural(r.charges == null ? 0 : r.charges, "charge");
     $("score-val-" + env).title = r ? summary(r) : "";
     $("score-sub-" + env).textContent = (r && !r.error ? "Order " + r.orderId + " · " : "") + "Total charges " + (c.charges == null ? "–" : c.charges) + " · Orders " + (c.orders == null ? "–" : c.orders);
-    $("res-" + env).textContent = pending[env] ? "Working…" : r ? summary(r) : "";
+    // The summary is for the order the buttons made. Clicking inside the app makes other orders; say so instead of looking like a mismatch.
+    const other = r && r.page && mode === "try" && viewing[env] && !viewing[env].endsWith(r.page);
+    $("res-" + env).textContent = pending[env] ? "Working…" : r ? "Buttons: " + summary(r) + (other ? " (the app above shows a different order)" : "") : "";
     $("res-" + env).title = r ? summary(r) : "";
     $("act-" + env).hidden = !(s && s.quickActions) || !!gone;
     document.querySelectorAll("[data-env='" + env + "']").forEach((b) => { if (!b.querySelector(".spin")) b.disabled = !canAct(); });
