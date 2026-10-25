@@ -28,6 +28,9 @@ export const setKnobs = (sessionId: string, knobs: Knobs) => action("setKnobs", 
 
 export const reset = (sessionId: string) => action("reset", { sessionId });
 
+/** Starts a fresh run of the same PR head; the panel switches to the new session when ingest saves it. */
+export const rerun = (sessionId: string) => action("rerun", { sessionId });
+
 /** Click = human approval. */
 export const fileBug = (sessionId: string, scenarioId: string) => action("fileBug", { sessionId, scenarioId });
 

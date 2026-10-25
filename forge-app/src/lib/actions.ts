@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { Queue } from "@forge/events";
 import {
   AskRequest,
   Knobs,
@@ -15,6 +16,7 @@ import {
   type Session,
 } from "../contracts/index";
 import { signSessionToken } from "../contracts/token";
+import type { IngestJob } from "../consumers/ingest";
 import { summaryFromContext, type IngestSummary } from "./ingest-summary";
 import { isVagueAsk, VAGUE_ASK } from "./honest";
 import { runner } from "./runner";
@@ -163,6 +165,40 @@ export async function resetSandboxes(sessionId: string): Promise<Result> {
       return { ok: true };
     } catch (err) {
       return fail(errText(err));
+    }
+  });
+}
+
+/** Before the runner has the session, a second ingest could still be about to run. Past this, it's stuck. */
+const INGEST_GRACE_MS = 2 * 60_000;
+
+/**
+ * Run again: a fresh session for the same PR head, as if the webhook fired again.
+ * Ingest tears the old run's sandboxes down and skips the job if a newer session got there first.
+ */
+export async function rerun(sessionId: string): Promise<Result<object>> {
+  return withSession(sessionId, async (s) => {
+    const age = Date.now() - Date.parse(s.createdAt);
+    if ((s.status === "INGESTING" || s.status === "PREPARING") && age < INGEST_GRACE_MS)
+      return fail("Credo is still reading the PR for this run. Try again in a minute.");
+    const context = await getContext(s.id);
+    const job: IngestJob = {
+      issueKey: s.issueKey,
+      repo: s.repo,
+      prNumber: s.prNumber,
+      prUrl: s.prUrl,
+      title: s.title,
+      prBody: context?.prBody ?? "",
+      baseSha: s.baseSha,
+      headSha: s.headSha,
+      action: "rerun",
+      rerunOf: s.id,
+    };
+    try {
+      await new Queue({ key: "ingest" }).push({ body: job });
+      return { ok: true };
+    } catch (err) {
+      return fail(`Could not queue the run: ${errText(err)}`);
     }
   });
 }

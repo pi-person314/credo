@@ -38,6 +38,8 @@ export const IngestJob = z.object({
   headSha: z.string(),
   cloneUrl: z.string().optional(),
   action: z.string().optional(),
+  // Set by the panel's "Run again" (lib/actions.ts rerun): the session this run replaces.
+  rerunOf: z.string().optional(),
 });
 export type IngestJob = z.input<typeof IngestJob>;
 
@@ -109,10 +111,16 @@ async function ingestGreptile(s: Session, job: z.output<typeof IngestJob>) {
   return { findings, errors, events: [event(s.id, "ingest.greptile", status, msg, errors.length ? { errors } : undefined)] };
 }
 
-/** A redelivered job for a PR head we already started. */
-async function alreadyStarted(issueKey: string, job: z.output<typeof IngestJob>) {
-  const prev = await sessionForIssue(issueKey);
-  return prev && prev.repo === job.repo && prev.prNumber === job.prNumber && prev.headSha === job.headSha && prev.status !== "FAILED";
+/**
+ * Why to drop a job, or undefined to run it.
+ * Webhook jobs: a redelivery for a PR head we already started (unless that run failed).
+ * Run again jobs: only if the session they replace is still the issue's latest, so a double click
+ * or a push that landed first doesn't start a second run.
+ */
+export function skipReason(prev: Session | undefined, job: Pick<z.output<typeof IngestJob>, "repo" | "prNumber" | "headSha" | "rerunOf">) {
+  if (job.rerunOf) return prev?.id === job.rerunOf ? undefined : "rerun superseded";
+  const same = prev && prev.repo === job.repo && prev.prNumber === job.prNumber && prev.headSha === job.headSha;
+  return same && prev.status !== "FAILED" ? "duplicate job" : undefined;
 }
 
 async function failSession(session: Session, message: string) {
@@ -126,7 +134,8 @@ export async function ingest(raw: unknown) {
   const job = parsed.data;
   const issueKey = job.issueKey ?? findJiraKey(job.title, job.branch);
   if (!issueKey) return void console.warn("ingest: no Jira key", job.title);
-  if (await alreadyStarted(issueKey, job)) return void console.log("ingest: duplicate job", job.repo, job.headSha);
+  const skip = skipReason(await sessionForIssue(issueKey), job);
+  if (skip) return void console.log(`ingest: ${skip}`, job.repo, job.headSha);
 
   let session: Session = {
     id: `ses_${randomUUID().replace(/-/g, "").slice(0, 16)}`,
@@ -141,6 +150,8 @@ export async function ingest(raw: unknown) {
     createdAt: new Date().toISOString(),
   };
   await saveSession(session);
+  // Run again: free the old run's sandboxes first. Best effort; the runner may have forgotten it already.
+  if (job.rerunOf) await runner.stop(job.rerunOf).catch((e) => console.warn(`ingest: stop ${job.rerunOf}: ${errMsg(e)}`));
 
   const [pr, jira, greptile] = await Promise.all([ingestPr(session, job), ingestJira(session), ingestGreptile(session, job)]);
   const confluence = await ingestConfluence(session, jira.jira);

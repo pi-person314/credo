@@ -106,7 +106,7 @@ Budgets per session: 8 scenarios, 3 attempts each, 5 minutes before the first re
 
 The **Credo** issue panel:
 
-- **Header**: verdict lozenge, PR link, sandbox status, Reset.
+- **Header**: verdict lozenge, PR link, sandbox status, Reset, Run again.
 - **Acceptance criteria**: each line from the ticket with `VERIFIED` / `FAILED` / `UNTESTED` and the scenarios behind it.
 - **Live sandbox**: the runner's live view, embedded. Toggle between **Watch the agent** (streamed browser frames + current step) and **Try it yourself** (clickable base and PR pages). Knobs above it: provider `ok / slow / timeout / error`, latency.
 - **Tests**: scenario table with base / PR results; each row opens evidence (DB rows, screenshot, trace, logs).
@@ -119,6 +119,7 @@ Rules:
 - Knobs always hit both sandboxes.
 - Every ask and result is saved and shows up in the report.
 - Reset reseeds both to the same fixture.
+- Run again starts a fresh session for the same PR head (new sandboxes, plan and report) and tears the old run's sandboxes down. Same as a new push, without needing one.
 - The live view is served by the runner at `/view/<sessionId>?t=<token>`. It uses the runner's own WebSocket and preview proxy, so Forge only has to embed one page.
 - **Spike at H0–H2:** confirm Forge lets the panel embed an external page (Custom UI resource via UI Kit `Frame`, with the runner domain in `permissions.external.frames`). Fallback: an "Open live sandbox" button that opens the same page in a new tab.
 

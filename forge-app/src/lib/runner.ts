@@ -19,4 +19,5 @@ export const runner = {
   knobs: (sessionId: string, knobs: Knobs) => call("POST", `/sessions/${sessionId}/knobs`, knobs),
   reset: (sessionId: string) => call("POST", `/sessions/${sessionId}/reset`),
   status: (sessionId: string) => call("GET", `/sessions/${sessionId}/status`),
+  stop: (sessionId: string) => call("DELETE", `/sessions/${sessionId}`),
 };

@@ -3,10 +3,18 @@ import { Button, Heading, Inline, Link, Lozenge, Stack, Text } from "@forge/reac
 import type { Event, SessionDetail } from "../../contracts";
 import { isActive, sandboxLook, sandboxState, verdictLook, verdictText } from "../ui";
 
-type Props = { detail: SessionDetail; events: Event[]; busy: string | null; onReset: () => void; canReset: boolean };
+type Props = {
+  detail: SessionDetail;
+  events: Event[];
+  busy: string | null;
+  onReset: () => void;
+  canReset: boolean;
+  onRerun: () => void;
+  canRerun: boolean;
+};
 
-// Verdict, PR link, pipeline + sandbox status, what the runner is busy with, Reset.
-export const Header = ({ detail, events, busy, onReset, canReset }: Props) => {
+// Verdict, PR link, pipeline + sandbox status, what the runner is busy with, Reset, Run again.
+export const Header = ({ detail, events, busy, onReset, canReset, onRerun, canRerun }: Props) => {
   const { session } = detail;
   const verdict = detail.report?.recommendation ?? session.recommendation;
   const sandbox = sandboxState(events);
@@ -16,9 +24,14 @@ export const Header = ({ detail, events, busy, onReset, canReset }: Props) => {
         <Heading size="small">
           PR #{session.prNumber}: {session.title}
         </Heading>
-        <Button appearance="subtle" iconBefore="refresh" onClick={onReset} isDisabled={!canReset}>
-          Reset
-        </Button>
+        <Inline space="space.050">
+          <Button appearance="subtle" iconBefore="refresh" onClick={onReset} isDisabled={!canReset}>
+            Reset
+          </Button>
+          <Button appearance="subtle" iconBefore="vid-play" onClick={onRerun} isDisabled={!canRerun}>
+            {canRerun ? "Run again" : "Starting…"}
+          </Button>
+        </Inline>
       </Inline>
       <Inline space="space.100" alignBlock="center" shouldWrap>
         {verdict ? (
