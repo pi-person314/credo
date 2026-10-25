@@ -84,6 +84,8 @@ export class SandboxManager {
       cwd: sb.dir,
       onLine,
       timeoutMs,
+      // The compose file comes from the PR: "${GITHUB_TOKEN}" in it must not interpolate the runner's secrets.
+      cleanEnv: true,
     });
   }
 

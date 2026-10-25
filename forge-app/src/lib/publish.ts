@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import type { Route } from "@forge/api";
 import type { Actor, AuditEntry, Diff, EventType, Recommendation, Report, Run, Scenario, Session } from "../contracts/index";
 import { bugAdf, diffSummary, notTested, regressionRows, reportAdf, VERDICT_LABEL, type Evidence } from "./adf";
-import { bugSummary } from "./honest";
+import { bugSummary, groupRegressions } from "./honest";
 import { hasGithubToken, postPrComment, setCommitStatus, updatePrComment, type StatusState } from "./github-write";
 import { signSessionToken } from "../contracts/token";
 import { appendAudit, appendEvents, keys } from "./store";
@@ -63,15 +63,19 @@ export function reportHash(report: Report, diffs: Diff[]) {
 // Commit status per verdict. NEEDS_REVIEW is "pending": nothing confirmed broken, but a person has to
 // look before it counts as done, and pending holds a required check without claiming a failure.
 // NO_BLOCKERS_FOUND is "success" with a description that still points at what was not tested.
-function statusFor(report: Report, diffs: Diff[]): { state: StatusState; description: string } {
-  const regressions = diffs.filter((d) => d.classification === "NEW_REGRESSION").length;
+export function statusFor(report: Report, diffs: Diff[], scenarios: Scenario[] = [], runs: Run[] = []): { state: StatusState; description: string } {
+  const failing = diffs.filter((d) => d.classification === "NEW_REGRESSION").map((d) => d.scenarioId);
+  const groups = groupRegressions(scenarios, runs, failing); // one per distinct failed check, like the report
   const untested = report.coverage.filter((c) => c.status === "UNTESTED").length;
+  const blocking = `${groups.length} regression${groups.length === 1 ? "" : "s"} vs base, failing in ${failing.length} of ${diffs.length} scenarios${groups[0]?.headline ? `. ${groups[0].headline}` : "."}`;
   const byVerdict: Record<Recommendation, { state: StatusState; description: string }> = {
-    BLOCKING_REGRESSION: { state: "failure", description: `${regressions} regression(s) vs base. ${report.failed} failed, ${report.passed} passed.` },
+    BLOCKING_REGRESSION: { state: "failure", description: blocking },
     NEEDS_REVIEW: { state: "pending", description: `Needs review: ${report.inconclusive} inconclusive, ${untested} AC untested.` },
     NO_BLOCKERS_FOUND: { state: "success", description: `No blockers found in ${report.passed} checks. See report for what was not tested.` },
   };
-  return byVerdict[report.recommendation];
+  const out = byVerdict[report.recommendation];
+  // GitHub caps commit status descriptions at 140 characters.
+  return { ...out, description: out.description.length > 140 ? `${out.description.slice(0, 139)}…` : out.description };
 }
 
 /** GitHub PR comment body. The hidden marker lets people (and us) find it. */
@@ -83,7 +87,7 @@ export function reportMarkdown(session: Session, report: Report, scenarios: Scen
     `<!-- pr-confidence:session=${session.id} -->`,
     `### Credo: ${VERDICT_LABEL[report.recommendation]}`,
     `Checked \`${session.headSha.slice(0, 7)}\` against base \`${session.baseSha.slice(0, 7)}\` for ${issue}.`,
-    diffSummary(report, diffs),
+    diffSummary(report, diffs, regressions.length),
     "",
     "#### Acceptance criteria",
     rows.length ? ["| # | Criterion | Status | Scenarios |", "|---|---|---|---|", ...rows].join("\n") : "No acceptance criteria found on the issue.",
@@ -116,7 +120,7 @@ async function publishGithub(session: Session, report: Report, scenarios: Scenar
   const issueUrl = await siteUrl().then((u) => (u ? `${u}/browse/${session.issueKey}` : undefined));
   const md = reportMarkdown(session, report, scenarios, diffs, issueUrl, runs);
   const id = (prior && (await updatePrComment(session.repo, prior, md).catch(() => undefined))) || (await postPrComment(session.repo, session.prNumber, md));
-  const { state, description } = statusFor(report, diffs);
+  const { state, description } = statusFor(report, diffs, scenarios, runs);
   await setCommitStatus(session.repo, session.headSha, state, description, issueUrl ?? session.prUrl);
   return { id, state, description };
 }
