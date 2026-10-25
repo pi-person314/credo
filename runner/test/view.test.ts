@@ -46,7 +46,7 @@ describe("browser routes", () => {
   });
   it("the page has both modes, the first action and no unescaped boot data", async () => {
     const html = (await app.inject(`/view/ses_1?t=${t}`)).body;
-    for (const s of ["Watch the agent", "Try it yourself", 'id="race"', "What the agent is doing", "prefers-color-scheme"]) expect(html).toContain(s);
+    for (const s of ["Watch the agent", "Try it yourself", 'id="race"', "What the agent is doing", "prefers-color-scheme", 'id="narrate" aria-pressed="false"', "CredoNarration"]) expect(html).toContain(s);
     expect(html.match(/<\/script>/g)).toHaveLength(1);
   });
 });

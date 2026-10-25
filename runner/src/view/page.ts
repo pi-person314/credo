@@ -2,6 +2,8 @@
 // One self-contained HTML document: no external scripts, styles or fonts. It fits the panel's
 // 520px Frame with a single page scroll (no inner scroll boxes) and also works full page.
 
+import { NARRATION_JS } from "./narration.js";
+
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 /** Plain words for the runner's event types, shown in the timeline. Unknown types fall back to the message. */
@@ -89,6 +91,8 @@ header h1 { font-size: 15px; margin: 0; font-weight: 600; flex: 1 1 220px; min-w
 .btn.big { padding: 8px 16px; font-size: 14px; }
 .btn.small { padding: 3px 8px; font-size: 12px; }
 .btn:disabled { opacity: .5; cursor: default; }
+.btn[aria-pressed="true"] { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
+.caption { flex: 1 1 100%; min-width: 0; color: var(--muted); font-size: 12px; font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .btn .spin { display: inline-block; width: 10px; height: 10px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: rot .7s linear infinite; margin-right: 6px; vertical-align: -1px; }
 @keyframes rot { to { transform: rotate(360deg); } }
 select, input { font: inherit; color: var(--text); background: var(--card); border: 1px solid var(--line); border-radius: 4px; padding: 4px 8px; }
@@ -175,6 +179,8 @@ a { color: var(--accent); }
     <h1 id="title">Live sandbox · ${esc(sessionId)}</h1>
     <span class="chip" id="status"><span class="dot connecting"></span>Connecting…</span>
     <span class="chip" id="idle" hidden></span>
+    <button class="btn small" id="narrate" aria-pressed="false" title="Read the agent's progress and results aloud">🔈 Narration off</button>
+    <div class="caption" id="caption" hidden></div>
   </header>
 
   <div class="banner" id="banner" role="status" hidden><div class="grow"><b id="banner-title"></b><span id="banner-text"></span></div><button class="btn" id="banner-btn" hidden></button></div>
@@ -263,6 +269,7 @@ a { color: var(--accent); }
 <script>
 (function () {
 const BOOT = ${boot};
+${NARRATION_JS}
 const q = "?t=" + encodeURIComponent(BOOT.t);
 const $ = (id) => document.getElementById(id);
 const ENVS = ["base", "head"];
@@ -500,9 +507,11 @@ async function act(env, action, btn) {
         log(r.error ? "fail" : "you", "You " + ACTION_WORDS[action] + " on " + NAME[r.env], r.error ? r.error : summary(r));
         if (r.page && mode === "try") ensurePreview(r.env, r.page, true);
       }
+      narrate({ text: CredoNarration.actionLine(env, action, out.results), prio: "high" });
     } catch (e) {
       for (const x of sides) results[x] = { env: x, action, pays: [], error: e.message };
       log("fail", "Quick action failed", e.message);
+      narrate({ text: "That didn't work: " + e.message, prio: "high" });
     } finally {
       sides.forEach((e) => { pending[e] = false; });
     }
@@ -515,6 +524,20 @@ function summary(r) {
 }
 $("race").onclick = () => act("both", "race", $("race"));
 document.querySelectorAll("[data-action]").forEach((b) => { b.onclick = () => act(b.dataset.env, b.dataset.action, b); });
+
+// ---------- voice narration: off by default, one line per test plus its verdict ----------
+const narr = new CredoNarration.Lines();
+const speaker = window.speechSynthesis && window.SpeechSynthesisUtterance
+  ? new CredoNarration.Speaker(window.speechSynthesis, window.SpeechSynthesisUtterance, { onchange: (line) => { $("caption").hidden = !line; $("caption").textContent = line ? "🔊 " + line : ""; } })
+  : null;
+if (!speaker) { $("narrate").disabled = true; $("narrate").textContent = "🔇 No speech in this browser"; }
+$("narrate").onclick = () => {
+  const on = !speaker.on;
+  if (on) speaker.enable(); else speaker.disable();
+  $("narrate").setAttribute("aria-pressed", on);
+  $("narrate").textContent = on ? "🔊 Narration on" : "🔈 Narration off";
+};
+const narrate = (line) => { if (speaker && line) speaker.say(line.text, line.prio); };
 
 // ---------- timeline ----------
 function log(status, what, detail, ts) {
@@ -631,10 +654,13 @@ function render(s) {
       "<td><span class='cls " + (d ? d.classification : "RUNNING") + "'>" + (d ? d.classification.replace(/_/g, " ") : "running") + "</span></td></tr>";
   }).join("") : "<tr><td colspan='4' class='refs'>No tests yet.</td></tr>";
   let added = false;
+  narr.learnScenarios(s.scenarios);
   for (const e of s.events) {
     const key = e.ts + e.type + e.message;
     if (seen.has(key)) continue;
     seen.add(key); added = true;
+    // Always learn; speaks only while narration is on, so the backlog on page load stays quiet.
+    narrate(narr.line(e));
     events.push({ ts: e.ts, status: e.status, what: BOOT.words[e.type] || e.message, detail: e.message });
     lastTs = e.ts;
   }
