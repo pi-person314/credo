@@ -74,3 +74,10 @@ describe("page script", () => {
     expect(() => new Function(js)).not.toThrow();
   });
 });
+
+describe("replay", () => {
+  it("needs a token and returns empty recordings for an unknown scenario", async () => {
+    expect((await app.inject(`/view/ses_1/replay/sc_a`)).statusCode).toBe(403);
+    expect((await app.inject(`/view/ses_1/replay/sc_a?t=${t}`)).json()).toEqual({ scenarioId: "sc_a", base: [], head: [] });
+  });
+});

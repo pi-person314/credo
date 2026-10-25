@@ -369,7 +369,7 @@ function connect(env, attempt) {
   let opened = false;
   ws.onopen = () => { if (my !== gen[env]) return; opened = true; attempt = 0; setConn(env, frames[env] ? "live" : "waiting"); paint(); };
   ws.onmessage = (m) => {
-    if (my !== gen[env]) return;
+    if (my !== gen[env] || replaying) return;
     let f; try { f = JSON.parse(m.data); } catch (e) { return; }
     const img = $("img-" + env);
     img.src = "data:image/jpeg;base64," + f.jpeg;
@@ -396,6 +396,41 @@ function retry(env, attempt, my) {
   };
   tick();
 }
+
+// ---------- Replay: play back what the agent's browser showed during one test ----------
+let replaying = false;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function replay(id) {
+  if (replaying) return;
+  let r;
+  try {
+    const res = await fetch(base + "replay/" + encodeURIComponent(id) + q);
+    if (res.status === 403) return expire("link");
+    r = await res.json();
+  } catch (e) { return log("fail", "Replay failed", e.message); }
+  if (!r.base.length && !r.head.length) return log("fail", "Nothing to replay for " + id, "The agent's browser showed nothing during this test (the runner may have restarted since).");
+  if ($("takeover").checked) { $("takeover").checked = false; $("takeover").onchange(); }
+  setMode("watch", true);
+  replaying = true;
+  $("panes").scrollIntoView({ block: "start", behavior: "smooth" });
+  await Promise.all(ENVS.map(async (env) => {
+    const list = r[env];
+    if (!list.length) { $("img-" + env).hidden = true; overlay(env, "<b>Nothing shown on " + NAME[env] + " during this test</b>"); return; }
+    overlay(env, null);
+    setConn(env, "live", "Replay");
+    for (let i = 0; i < list.length; i++) {
+      const f = list[i];
+      $("img-" + env).src = "data:image/jpeg;base64," + f.jpeg; $("img-" + env).hidden = false; frames[env] = true;
+      $("step-" + env).innerHTML = "▶ Replay · <code>" + text(id) + "</code> · " + text(f.step || "") + " (" + (i + 1) + "/" + list.length + ")";
+      const next = list[i + 1];
+      await sleep(next ? Math.min(1500, Math.max(350, new Date(next.ts) - new Date(f.ts))) : 1200);
+    }
+  }));
+  for (const env of ENVS) { $("step-" + env).innerHTML = "Replay finished · <code>" + text(id) + "</code>"; setConn(env, conn[env] === "off" ? "off" : "waiting"); }
+  replaying = false;
+  paint();
+}
+$("tests").addEventListener("click", (e) => { const a = e.target.closest && e.target.closest("[data-replay]"); if (!a) return; e.preventDefault(); replay(a.dataset.replay); });
 
 // ---------- Try it yourself: the two app previews, with loading / error / retry ----------
 const previewUrl = (env, path) => "/preview/" + encodeURIComponent(BOOT.id) + "/" + env + "/" + encodeURIComponent(BOOT.t) + (path || startPage);
@@ -675,7 +710,7 @@ function render(s) {
   const diffs = new Map(s.diffs.map((d) => [d.scenarioId, d]));
   $("tests").innerHTML = s.scenarios.length ? s.scenarios.map((sc) => {
     const d = diffs.get(sc.id);
-    return "<tr><td><div>" + text(sc.objective) + "</div><div class='refs'>" + text(sc.id) + (sc.origin !== "planner" ? " · " + text(sc.origin) : "") + " · " + text(sc.sourceRefs.join(" ")) + " · <a href='" + base + "spec/" + encodeURIComponent(sc.id) + ".spec.ts" + q + "'>.spec.ts</a></div></td>" +
+    return "<tr><td><div>" + text(sc.objective) + "</div><div class='refs'>" + text(sc.id) + (sc.origin !== "planner" ? " · " + text(sc.origin) : "") + " · " + text(sc.sourceRefs.join(" ")) + " · <a href='" + base + "spec/" + encodeURIComponent(sc.id) + ".spec.ts" + q + "'>.spec.ts</a> · <a href='#' data-replay='" + text(sc.id) + "' title='Play back what the agent's browser showed during this test'>▶ Replay</a></div></td>" +
       "<td class='res " + (d ? d.base : "") + "'>" + (d ? d.base : "…") + "</td><td class='res " + (d ? d.head : "") + "'>" + (d ? d.head : "…") + "</td>" +
       "<td><span class='cls " + (d ? d.classification : "RUNNING") + "'>" + (d ? d.classification.replace(/_/g, " ") : "running") + "</span></td></tr>";
   }).join("") : "<tr><td colspan='4' class='refs'>No tests yet.</td></tr>";

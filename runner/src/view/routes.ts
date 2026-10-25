@@ -115,6 +115,14 @@ export async function viewRoutes(app: FastifyInstance, rt: Runtime) {
     };
   });
 
+  // Replay: the agent's browser frames recorded during one scenario, per side.
+  app.get<{ Params: { id: string; scenarioId: string }; Querystring: { t?: string } }>("/view/:id/replay/:scenarioId", async (req, reply) => {
+    const { id, scenarioId } = req.params;
+    if (!ok(id, req.query.t)) return deny(reply);
+    const side = (env: "base" | "head") => browser.recording(id, env, scenarioId).map((f) => ({ ts: f.ts, step: f.step, jpeg: f.jpeg }));
+    return reply.header("cache-control", "no-store").send({ scenarioId, base: side("base"), head: side("head") });
+  });
+
   app.post<{ Params: { id: string }; Querystring: { t?: string } }>("/view/:id/knobs", async (req, reply) => {
     if (!ok(req.params.id, req.query.t)) return deny(reply);
     const knobs = KnobsRequest.parse(req.body);
