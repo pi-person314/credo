@@ -30,16 +30,31 @@ export function classify(base: AssertionResult, headAttempts: AssertionResult[])
 /** Ref a scenario uses to point at acceptance criterion `index` (1-based) of `issueKey`. */
 export const acRef = (issueKey: string, index: number) => `jira:${issueKey}#ac${index}`;
 
-/** Status of each acceptance criterion, from the scenarios that point at it. */
+/** The criterion a scenario mainly checks: its first "jira:<KEY>#acN" ref. */
+const primaryAc = (s: Scenario) => s.sourceRefs.find((r) => /^jira:[^#]+#ac\d+$/.test(r));
+
+/**
+ * Status of each acceptance criterion, from the scenarios that point at it.
+ * A failing scenario only fails its primary criterion (its first AC ref). A scenario tagged with several
+ * criteria usually fails one specific check (e.g. the charge count), so a double-charge regression must not
+ * also mark "retries succeed" FAILED. For its other criteria a failing scenario proves nothing either way:
+ * they need a passing scenario to be VERIFIED, and stay INCONCLUSIVE if that failure is all they have.
+ */
 export function coverage(issueKey: string, criteria: string[], scenarios: Scenario[], diffs: Diff[]): AcCoverage[] {
+  const failing = (c: DiffClass) => c === "NEW_REGRESSION" || c === "EXISTING_FAILURE";
   return criteria.map((text, i) => {
     const ref = acRef(issueKey, i + 1);
-    const scenarioIds = scenarios.filter((s) => s.sourceRefs.includes(ref)).map((s) => s.id);
-    const classes = diffs.filter((d) => scenarioIds.includes(d.scenarioId)).map((d) => d.classification);
+    const claiming = scenarios.filter((s) => s.sourceRefs.includes(ref));
+    const scenarioIds = claiming.map((s) => s.id);
+    const evidence = diffs.flatMap((d) => {
+      const s = claiming.find((x) => x.id === d.scenarioId);
+      return s ? [{ c: d.classification, primary: primaryAc(s) === ref }] : [];
+    });
     let status: Coverage = "UNTESTED";
-    if (classes.some((c) => c === "NEW_REGRESSION" || c === "EXISTING_FAILURE")) status = "FAILED";
-    else if (classes.some((c) => c === "FLAKY" || c === "INCONCLUSIVE")) status = "INCONCLUSIVE";
-    else if (classes.length > 0) status = "VERIFIED";
+    if (evidence.some((e) => failing(e.c) && e.primary)) status = "FAILED";
+    else if (evidence.some((e) => e.c === "FLAKY" || e.c === "INCONCLUSIVE")) status = "INCONCLUSIVE";
+    else if (evidence.some((e) => !failing(e.c))) status = "VERIFIED";
+    else if (evidence.length > 0) status = "INCONCLUSIVE";
     return { index: i + 1, text, status, scenarioIds };
   });
 }

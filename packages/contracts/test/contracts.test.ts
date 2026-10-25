@@ -70,6 +70,26 @@ describe("coverage", () => {
     // The happy path no longer claims AC2: only the recovery scenario (error -> ok -> retry -> paid) verifies it.
     expect(out[1]!.scenarioIds).toEqual(["sc_error_then_retry_succeeds"]);
   });
+
+  // A double-charge regression tagged with AC1 (primary) and AC2 must not fail "retry after error works".
+  const sc = (id: string, refs: number[]) =>
+    Scenario.parse({ ...scenarios[0], id, sourceRefs: refs.map((n) => `jira:PAY-5#ac${n}`) });
+  const tagged = [sc("sc_retry_ok", [2]), sc("sc_concurrent_recovery", [1, 2]), sc("sc_timeout_race", [1, 3])];
+
+  it("fails only the primary criterion of a failing scenario", () => {
+    const out = coverage("PAY-5", acs, tagged, [
+      d("sc_retry_ok", "UNCHANGED_PASS"),
+      d("sc_concurrent_recovery", "NEW_REGRESSION"),
+      d("sc_timeout_race", "UNCHANGED_PASS"),
+    ]);
+    expect(out.map((a) => a.status)).toEqual(["FAILED", "VERIFIED", "VERIFIED"]);
+    expect(out[1]!.scenarioIds).toEqual(["sc_retry_ok", "sc_concurrent_recovery"]);
+  });
+
+  it("leaves a criterion inconclusive when its only scenario failed on another criterion", () => {
+    const out = coverage("PAY-5", acs, tagged, [d("sc_concurrent_recovery", "NEW_REGRESSION"), d("sc_timeout_race", "NEW_REGRESSION")]);
+    expect(out.map((a) => a.status)).toEqual(["FAILED", "INCONCLUSIVE", "INCONCLUSIVE"]);
+  });
 });
 
 describe("findJiraKey", () => {

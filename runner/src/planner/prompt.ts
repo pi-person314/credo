@@ -40,6 +40,8 @@ Rules:
   order status is "paid" and exactly 1 charge row exists. Never map a success criterion to a scenario that only asserts
   failure behavior (error statuses, 0 charges); map that one to the criterion it does check, or to none.
 - Every scenario must point at the acceptance criterion it checks with "jira:<KEY>#ac<N>" (N is 1-based) when one applies.
+  List first the criterion its checks would break (a charge count check -> the "never charged twice" criterion). A
+  failing scenario only fails its first criterion; add others only if the scenario also proves them when it passes.
 - Write deterministic checks: database row counts and status codes beat UI text. Races need a slow provider (e.g. slow, 800 ms) and parallel calls.
 - The same scenario runs on the old code and the new code; write what SHOULD be true per the ticket and spec, not what the new code does.
 - Answer with a JSON array of scenarios only. No prose, no markdown fences.`;

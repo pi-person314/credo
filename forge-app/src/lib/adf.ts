@@ -68,11 +68,19 @@ const CLASS_LABEL: [DiffClass, string, string][] = [
   ["UNCHANGED_PASS", "unchanged pass", "unchanged pass"],
 ];
 
-/** e.g. "5 scenarios (base vs PR): 1 regression, 1 inconclusive, 3 unchanged pass." */
-export function diffSummary(report: Pick<Report, "notRun">, diffs: Diff[]): string {
+/**
+ * e.g. "5 scenarios (base vs PR): 1 regression, 1 inconclusive, 3 unchanged pass."
+ * `distinctRegressions` (regressions grouped by failed check) counts bugs, not scenarios:
+ * "7 scenarios (base vs PR): 1 regression, failing in 3 scenarios, 4 unchanged pass."
+ */
+export function diffSummary(report: Pick<Report, "notRun">, diffs: Diff[], distinctRegressions?: number): string {
   const parts = CLASS_LABEL.flatMap(([cls, one, many]) => {
     const n = diffs.filter((d) => d.classification === cls).length;
-    return n ? [`${n} ${n === 1 ? one : many}`] : [];
+    if (!n) return [];
+    if (cls === "NEW_REGRESSION" && distinctRegressions && distinctRegressions < n) {
+      return [`${distinctRegressions} ${distinctRegressions === 1 ? one : many}, failing in ${n} scenarios`];
+    }
+    return [`${n} ${n === 1 ? one : many}`];
   });
   if (report.notRun > 0) parts.push(`${report.notRun} not run`);
   const total = diffs.length + report.notRun;
@@ -130,7 +138,7 @@ export function reportAdf(session: Session, report: Report, scenarios: Scenario[
     panel(
       VERDICT_PANEL[report.recommendation],
       para(text("Checked "), pr, text(" at "), code(short(session.headSha)), text(" against base "), code(short(session.baseSha)), text(".")),
-      para(text(diffSummary(report, diffs))),
+      para(text(diffSummary(report, diffs, regressions.length))),
     ),
     heading(4, "Acceptance criteria"),
     report.coverage.length
