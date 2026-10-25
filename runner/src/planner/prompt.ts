@@ -12,6 +12,7 @@ const FORMAT = `Scenario JSON format (the runner executes exactly this, nothing 
   "knobs": { "provider": "ok"|"slow"|"timeout"|"error", "latencyMs": <0-30000> },  // optional, whole scenario
   "steps": [                                 // 1-20
     { "op": "http", "method": "GET"|"POST"|..., "path": "/api/...", "body": {...}, "saveAs": "<name>" },
+    { "op": "http", "method": "POST", "path": "/__test/provider", "body": { "mode": "ok", "latencyMs": 0 } },  // switch the provider mid-scenario
     { "op": "parallel", "count": <2-20>, "step": { "op": "http", ... , "saveAs": "<name>" } },
     { "op": "ui", "action": "goto", "target": "/page" },
     { "op": "ui", "action": "click"|"dblclick", "target": "<manifest selector name or CSS selector>" },
@@ -30,7 +31,14 @@ const FORMAT = `Scenario JSON format (the runner executes exactly this, nothing 
 "$name.path" in a value means a field of the response saved as "name" (e.g. "$order.id").
 A parallel step's saveAs holds all responses; http_status on it checks every one.
 Rules:
-- Only use the API routes, pages, selectors, fixtures and tables in the manifest. Never call /__test routes.
+- Only use the API routes, pages, selectors, fixtures and tables in the manifest. Never call /__test routes, except
+  POST /__test/provider { "mode": <manifest provider mode>, "latencyMs": <0-30000> } as a top-level step to change the
+  provider mode mid-scenario ("knobs" only sets the starting mode).
+- A criterion phrased as "X succeeds", "works" or "completes" needs a scenario that proves the success, not just that
+  the failure is handled. For "retries after a provider error succeed": knobs provider "error" -> pay (fails) ->
+  POST /__test/provider { "mode": "ok" } -> pay again -> GET /api/orders/$order.id, and assert the retry is 200, the
+  order status is "paid" and exactly 1 charge row exists. Never map a success criterion to a scenario that only asserts
+  failure behavior (error statuses, 0 charges); map that one to the criterion it does check, or to none.
 - Every scenario must point at the acceptance criterion it checks with "jira:<KEY>#ac<N>" (N is 1-based) when one applies.
 - Write deterministic checks: database row counts and status codes beat UI text. Races need a slow provider (e.g. slow, 800 ms) and parallel calls.
 - The same scenario runs on the old code and the new code; write what SHOULD be true per the ticket and spec, not what the new code does.

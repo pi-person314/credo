@@ -70,6 +70,11 @@ export class SandboxManager {
     this.lastActivity.set(sessionId, Date.now());
   }
 
+  /** When the session's sandboxes were last used (ms epoch); the idle sweeper counts from here. */
+  lastActive(sessionId: string): number | undefined {
+    return this.lastActivity.get(sessionId);
+  }
+
   sessions(): string[] {
     return [...new Set([...this.sandboxes.values()].map((s) => s.sessionId))];
   }
