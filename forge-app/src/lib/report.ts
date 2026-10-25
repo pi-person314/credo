@@ -60,7 +60,7 @@ function counts(scenarios: Scenario[], diffs: Diff[]) {
 function markdown(session: Session, r: Omit<Report, "markdown">, scenarios: Scenario[], diffs: Diff[]) {
   const objective = (id: string) => scenarios.find((s) => s.id === id)?.objective ?? id;
   return [
-    `**PR Confidence: ${r.recommendation}** for PR #${session.prNumber} (${session.baseSha.slice(0, 7)} → ${session.headSha.slice(0, 7)})`,
+    `**Credo: ${r.recommendation}** for PR #${session.prNumber} (${session.baseSha.slice(0, 7)} → ${session.headSha.slice(0, 7)})`,
     diffSummary(r, diffs),
     "",
     "**Acceptance criteria**",

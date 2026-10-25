@@ -111,7 +111,7 @@ export function reportAdf(session: Session, report: Report, scenarios: Scenario[
   const unclear = diffs.filter((d) => d.classification === "FLAKY" || d.classification === "INCONCLUSIVE" || d.classification === "EXISTING_FAILURE");
   const pr = session.prUrl ? link(`${session.repo}#${session.prNumber}`, session.prUrl) : text(`${session.repo}#${session.prNumber}`);
   return doc(
-    heading(3, `PR Confidence: ${VERDICT_LABEL[report.recommendation]}`),
+    heading(3, `Credo: ${VERDICT_LABEL[report.recommendation]}`),
     panel(
       VERDICT_PANEL[report.recommendation],
       para(text("Checked "), pr, text(" at "), code(short(session.headSha)), text(" against base "), code(short(session.baseSha)), text(".")),
@@ -144,7 +144,7 @@ export function bugAdf(session: Session, scenario: Scenario, diff: Diff, headRun
   const failed = headRuns.flatMap((r) => r.assertions.filter((a) => a.result === "FAIL"));
   const knobs = scenario.knobs ? ` Provider mode ${scenario.knobs.provider}, latency ${scenario.knobs.latencyMs} ms.` : "";
   return doc(
-    para(text(`Found by PR Confidence while checking ${session.issueKey}. `), session.prUrl ? link(`${session.repo}#${session.prNumber}`, session.prUrl) : text(`${session.repo}#${session.prNumber}`)),
+    para(text(`Found by Credo while checking ${session.issueKey}. `), session.prUrl ? link(`${session.repo}#${session.prNumber}`, session.prUrl) : text(`${session.repo}#${session.prNumber}`)),
     para(text(`Scenario `), code(scenario.id), text(`: ${scenario.objective}. Base `), code(short(session.baseSha)), text(` ${diff.base}, PR `), code(short(session.headSha)), text(` ${diff.head}.`)),
     heading(4, "Steps to reproduce"),
     para(text(`Start from fixture ${scenario.fixture}.${knobs}`)),

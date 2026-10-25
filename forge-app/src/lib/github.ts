@@ -16,7 +16,7 @@ export function githubHeaders(accept = "application/vnd.github+json"): Record<st
   const token = process.env.GITHUB_TOKEN;
   return {
     Accept: accept,
-    "User-Agent": "pr-confidence-forge",
+    "User-Agent": "credo-forge",
     "X-GitHub-Api-Version": "2022-11-28",
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };

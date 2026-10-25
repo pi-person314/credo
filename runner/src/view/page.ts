@@ -38,7 +38,7 @@ export function viewPage(sessionId: string, token: string): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>Live sandbox</title>
+<title>Credo · Live sandbox</title>
 <style>
 :root {
   --bg: #f7f8fa; --card: #ffffff; --text: #172b4d; --muted: #626f86; --line: #dcdfe4;
@@ -301,7 +301,7 @@ function banner(kind, title, msg, btn) {
 function expire(why) {
   if (gone === why) return;
   gone = why;
-  if (why === "link") banner("bad", "This link has expired.", " Reopen the live sandbox from the PR Confidence panel in Jira.");
+  if (why === "link") banner("bad", "This link has expired.", " Reopen the live sandbox from the Credo panel in Jira.");
   else banner("warn", "The sandboxes have shut down.", " They stop after " + ((state && state.idleTtlMin) || "a few") + " minutes without use. Push to the PR to start a new run, then reopen this view.", { label: "Check again", run: () => poll() });
   for (const env of ENVS) {
     overlay(env, why === "link" ? "<b>Link expired</b>" : "<b>Sandbox shut down</b><span>Nothing is running here any more.</span>");

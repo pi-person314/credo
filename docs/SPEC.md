@@ -1,4 +1,4 @@
-# PR Confidence Agent: Final Spec (v3, Forge)
+# Credo: Final Spec (v3, Forge)
 
 Cal Hacks · Atlassian Agentic Workforce Challenge · **Track 1: Agents that do the work**
 
@@ -37,7 +37,7 @@ It never says a PR is "safe". Humans still decide to merge.
 - **Forge app on Jira** (`forge-app/`):
   - Web trigger for GitHub `pull_request` opened / synchronize. Jira key from PR title or branch.
   - Reads the Jira issue, acceptance criteria, assignee, and Confluence pages linked from the issue.
-  - **Issue panel "PR Confidence"** (UI Kit): verdict, acceptance-criteria checklist, risks, scenario table (base / PR), evidence links, knobs, reset, ask box, timeline, audit log, and the embedded live view.
+  - **Issue panel "Credo"** (UI Kit): verdict, acceptance-criteria checklist, risks, scenario table (base / PR), evidence links, knobs, reset, ask box, timeline, audit log, and the embedded live view.
   - **Rovo agent** with actions: get status, ask for a test, set knobs, file regression Bug (after confirm).
   - Web trigger that receives runner events. State in Forge KVS.
   - Publishing: Jira comment with the report; linked Bug with repro + evidence (after confirm); GitHub PR comment + commit status.
@@ -104,7 +104,7 @@ Budgets per session: 8 scenarios, 3 attempts each, 5 minutes before the first re
 
 ## 6. Interactive sandbox (inside Jira)
 
-The **PR Confidence** issue panel:
+The **Credo** issue panel:
 
 - **Header**: verdict lozenge, PR link, sandbox status, Reset.
 - **Acceptance criteria**: each line from the ticket with `VERIFIED` / `FAILED` / `UNTESTED` and the scenarios behind it.
@@ -272,7 +272,7 @@ Mocks so nobody waits:
 ## 11. Demo video (3 minutes max)
 
 1. **0:00** The PAY-5 ticket in Jira, with 3 acceptance criteria. Open a PR that "simplifies" retries.
-2. **0:20** The PR Confidence panel lights up: reading the ticket, the Confluence spec, and Greptile's note. Sandboxes building.
+2. **0:20** The Credo panel lights up: reading the ticket, the Confluence spec, and Greptile's note. Sandboxes building.
 3. **0:45** Plan: 3 scenarios, each linked to an acceptance criterion.
 4. **1:05** Watch the agent: live browser on base and PR. Result: 1 charge vs 2. AC1 goes `FAILED`. Verdict `BLOCKING_REGRESSION`.
 5. **1:40** Try it yourself: double-click Pay in both. Flip the provider to `timeout`. In Rovo: "What if the provider times out and the user retries?" A new row runs live.
