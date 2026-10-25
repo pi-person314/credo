@@ -3,7 +3,7 @@ import { kvs } from "@forge/kvs";
 import { createHash } from "node:crypto";
 import type { Route } from "@forge/api";
 import type { Actor, AuditEntry, Diff, EventType, Recommendation, Report, Run, Scenario, Session } from "../contracts/index";
-import { bugAdf, diffSummary, notTested, reportAdf, VERDICT_LABEL, type Evidence } from "./adf";
+import { bugAdf, greptileNote, diffSummary, notTested, reportAdf, VERDICT_LABEL, type Evidence } from "./adf";
 import { hasGithubToken, postPrComment, setCommitStatus, updatePrComment, type StatusState } from "./github-write";
 import { signSessionToken } from "../contracts/token";
 import { appendAudit, appendEvents, keys } from "./store";
@@ -90,7 +90,7 @@ export function reportMarkdown(session: Session, report: Report, scenarios: Scen
     "",
     "#### Regressions",
     regressions.length
-      ? regressions.map((d) => `- \`${d.scenarioId}\` ${name(d.scenarioId)}: passes on base, fails on this PR (confirmed on rerun).`).join("\n")
+      ? regressions.map((d) => `- \`${d.scenarioId}\` ${name(d.scenarioId)}: passes on base, fails on this PR (confirmed on rerun).${greptileNote(scenarios, d.scenarioId)}`).join("\n")
       : "None found in the scenarios that ran.",
     "",
     "#### What was not tested",

@@ -54,11 +54,28 @@ export async function readPrFiles({ repo, prNumber }: PrRef): Promise<ChangedFil
 
 const isGreptile = (c: any) => /greptile/i.test(String(c?.user?.login ?? ""));
 
-/** Rough severity from the comment text. Greptile has no structured severity. */
-export function severityOf(text: string): Severity {
-  if (/\b(critical|security|race|duplicate|double|data loss|vulnerab|deadlock|crash)/i.test(text)) return "high";
+/** Severity from Greptile's P0-P3 badge (`<img alt="P1">`) when present, else a rough guess from the text. */
+export function severityOf(text: string, raw = text): Severity {
+  const badge = /alt="P([0-3])"/i.exec(raw)?.[1];
+  if (badge) return badge <= "1" ? "high" : badge === "2" ? "medium" : "low";
+  if (/\b(critical|security|race|duplicate|double|twice|data loss|vulnerab|deadlock|crash)/i.test(text)) return "high";
   if (/\b(bug|error|incorrect|missing|leak|break|fail)/i.test(text)) return "medium";
   return "low";
+}
+
+/** Greptile comments are HTML + markdown with badges and links; keep the readable text. */
+export function plainText(body: string) {
+  return body
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/<details[^>]*>[\s\S]*?<\/details>/gi, "") // mermaid diagram
+    .replace(/<img[^>]*alt="(P[0-3])"[^>]*>/gi, "[$1]")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/^\s*Confidence Score: \d\/5\s*$/m, "") // summary header; the verdict line follows
+    .replace(/\\([.\-_*])/g, "$1")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n\s*\n\s*(\n\s*)+/g, "\n\n")
+    .trim();
 }
 
 /** Greptile bot comments (issue comments, review comments, review bodies) as findings. */
@@ -72,15 +89,16 @@ export async function readGreptileFindings({ repo, prNumber }: PrRef, sessionId:
   const errors = results.flatMap((r) => (r.status === "rejected" ? [String(r.reason?.message ?? r.reason)] : []));
   const comments = results.flatMap((r) => (r.status === "fulfilled" ? r.value : [])).filter(isGreptile);
   const findings: Finding[] = comments
-    .filter((c) => String(c.body ?? "").trim())
+    .filter((c) => plainText(String(c.body ?? "")))
     .map((c) => {
       const where = c.path ? `${c.path}${c.line ? `:${c.line}` : ""}: ` : "";
-      const body = where + String(c.body).trim();
+      const raw = String(c.body);
+      const body = where + plainText(raw);
       return {
         id: `fnd_gh_${c.id}`,
         sessionId,
         source: "greptile" as const,
-        severity: severityOf(body),
+        severity: severityOf(body, raw),
         description: body.length > FINDING_CHARS ? body.slice(0, FINDING_CHARS - 1) + "…" : body,
         url: c.html_url || undefined,
         commitSha: c.commit_id ?? headSha,

@@ -38,7 +38,7 @@ function risks(findings: Finding[], tested: string[], diffs: Diff[], acs: AcCove
     ...diffs.filter((d) => d.classification === "NEW_REGRESSION").map((d) => `Regression: ${d.scenarioId} passes on base, fails on PR`),
     ...diffs.filter((d) => d.classification === "FLAKY" || d.classification === "INCONCLUSIVE").map((d) => `${d.classification}: ${d.scenarioId}`),
     ...acs.filter((a) => a.status === "UNTESTED").map((a) => `Untested AC${a.index}: ${a.text}`),
-    ...findings.filter((f) => f.severity !== "low" && !tested.includes(f.id)).map((f) => `Untested ${f.severity} finding (${f.source}): ${f.description}`),
+    ...findings.filter((f) => f.severity !== "low" && !tested.includes(f.id)).map((f) => `Untested ${f.severity} finding (${f.source}): ${f.description.split("\n")[0]}`),
   ];
 }
 

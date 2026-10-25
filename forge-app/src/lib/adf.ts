@@ -101,6 +101,10 @@ export function notTested(report: Report): string[] {
 
 const objective = (scenarios: Scenario[], id: string) => scenarios.find((s) => s.id === id)?.objective ?? id;
 
+/** " Greptile flagged this too." when the scenario was planned from a Greptile finding. */
+export const greptileNote = (scenarios: Scenario[], id: string) =>
+  scenarios.find((s) => s.id === id)?.sourceRefs.some((r) => r.startsWith("greptile:")) ? " Greptile flagged this too." : "";
+
 /** Jira comment body for a report. */
 export function reportAdf(session: Session, report: Report, scenarios: Scenario[], diffs: Diff[]): Node {
   const regressions = diffs.filter((d) => d.classification === "NEW_REGRESSION");
@@ -122,7 +126,7 @@ export function reportAdf(session: Session, report: Report, scenarios: Scenario[
       : para(text("No acceptance criteria found on the issue.")),
     heading(4, "Regressions"),
     regressions.length
-      ? bullets(regressions.map((d) => [code(d.scenarioId), text(` ${objective(scenarios, d.scenarioId)}: passes on base, fails on PR (confirmed on rerun).`)]))
+      ? bullets(regressions.map((d) => [code(d.scenarioId), text(` ${objective(scenarios, d.scenarioId)}: passes on base, fails on PR (confirmed on rerun).${greptileNote(scenarios, d.scenarioId)}`)]))
       : para(text("None found in the scenarios that ran.")),
     ...(unclear.length
       ? [heading(4, "Needs a look"), bullets(unclear.map((d) => [code(d.scenarioId), text(` ${objective(scenarios, d.scenarioId)}: ${d.classification} (base ${d.base}, PR ${d.head}).`)]))]
