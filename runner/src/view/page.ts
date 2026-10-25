@@ -121,7 +121,13 @@ details.knobs summary::-webkit-details-marker { display: none; }
 .note { font-size: 12px; color: var(--muted); }
 .note.ok { color: var(--ok); font-weight: 600; } .note.bad { color: var(--bad); font-weight: 600; } .note.warn { color: var(--warn); font-weight: 600; }
 .panes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-@media (max-width: 640px) { .panes, .compare { grid-template-columns: 1fr; } .verdict { max-width: none; } details.knobs { margin-left: 0; } }
+@media (max-width: 640px) {
+  .compare { grid-template-columns: 1fr 1fr; } .verdict { grid-column: 1 / -1; max-width: none; padding: 4px 10px; }
+  details.knobs { margin-left: 0; } .pane-head .sha { display: none; } .pane-head { padding: 5px 8px; } .actions { padding: 5px 8px; }
+  .hero p { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .tabs button { padding: 6px 10px; }
+}
+@media (max-width: 420px) { .panes, .compare { grid-template-columns: 1fr; } }
 .pane { background: var(--card); border: 1px solid var(--line); border-radius: 6px; box-shadow: var(--shadow); min-width: 0; display: flex; flex-direction: column; }
 .pane.differ { border-color: var(--bad); }
 .pane-head { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--line); }
@@ -194,16 +200,16 @@ a { color: var(--accent); }
   </div>
 
   <div class="compare" id="compare" aria-live="polite">
-    ${SIDES.map((s) => `<div class="score" id="score-${s.env}"><div class="lbl">${s.name} · ${s.sub}</div><div class="val" id="score-val-${s.env}">No order yet</div><div class="sub" id="score-sub-${s.env}">Charges – · Orders –</div></div>`).join("\n    ")}
+    ${SIDES.map((s) => `<div class="score" id="score-${s.env}"><div class="lbl">${s.name} · ${s.sub}</div><div class="val" id="score-val-${s.env}">No order yet</div><div class="sub" id="score-sub-${s.env}">&nbsp;</div></div>`).join("\n    ")}
     <div class="verdict" id="verdict">Run an action to compare</div>
   </div>
 
   <div class="bar">
     <div class="tabs" role="tablist" aria-label="Mode">
-      <button role="tab" id="tab-watch" aria-selected="true" aria-controls="panes"><span class="dot" id="tab-dot"></span>Watch the agent</button>
+      <button role="tab" id="tab-watch" aria-selected="true" aria-controls="panes"><span class="dot" id="tab-dot"></span>Agent's browser</button>
       <button role="tab" id="tab-try" aria-selected="false" aria-controls="panes" tabindex="-1">Try it yourself</button>
     </div>
-    <label class="takeover" id="takeover-wrap"><input type="checkbox" id="takeover"> Take over the agent's browser</label>
+    <label class="takeover" id="takeover-wrap" title="Click, scroll and type in the agent's browser yourself while the agent isn't testing"><input type="checkbox" id="takeover"> Take over</label>
     <details class="knobs" id="knobs">
       <summary class="btn" id="knobs-sum">Failure knobs · <span id="knobs-now">…</span></summary>
       <div class="knob-box">
@@ -257,7 +263,7 @@ a { color: var(--accent); }
   </div>
 
   <section class="card">
-    <h2>What the agent is doing <span class="chip" id="now" hidden></span><button class="btn small" id="more" hidden>Show all</button></h2>
+    <h2>Timeline <span class="chip" id="now" hidden></span><button class="btn small" id="more" hidden>Show all</button></h2>
     <ol class="timeline" id="timeline" aria-live="polite"><li><span class="empty">Waiting for the first step…</span></li></ol>
   </section>
 
@@ -277,6 +283,7 @@ const NAME = { base: "base", head: "PR" };
 const text = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => "&#" + c.charCodeAt(0) + ";");
 const base = "/view/" + encodeURIComponent(BOOT.id) + "/";
 
+let touched = false, latestSig = null;
 let mode = "watch", modeChosen = false, state = null, gone = null, startPage = "/", lastTs, showAll = false;
 const events = [], seen = new Set();
 const results = { base: null, head: null };
@@ -309,7 +316,7 @@ function expire(why) {
   if (gone === why) return;
   gone = why;
   if (why === "link") banner("bad", "This link has expired.", " Reopen the live sandbox from the Credo panel in Jira.");
-  else banner("warn", "The sandboxes have shut down.", " They stop after " + ((state && state.idleTtlMin) || "a few") + " minutes without use. Push to the PR to start a new run, then reopen this view.", { label: "Check again", run: () => poll() });
+  else banner("warn", "The sandboxes have shut down.", " They stop after " + ((state && state.idleTtlMin) || "a few") + " minutes without use, or when the runner is redeployed. Push a commit to the PR to start a new run, then reopen this view.", { label: "Check again", run: () => poll() });
   for (const env of ENVS) {
     overlay(env, why === "link" ? "<b>Link expired</b>" : "<b>Sandbox shut down</b><span>Nothing is running here any more.</span>");
     $("img-" + env).hidden = $("frame-" + env).hidden = true;
@@ -342,7 +349,7 @@ for (const [id, m] of [["tab-watch", "watch"], ["tab-try", "try"]]) {
 function overlay(env, html) { const o = $("ov-" + env); if (html == null) { o.hidden = true; return; } o.innerHTML = html; o.hidden = false; }
 function setConn(env, st, label) {
   conn[env] = st;
-  const words = { connecting: "Connecting…", live: "Live", waiting: "Connected", off: "Offline" };
+  const words = { connecting: "Connecting…", live: state && state.busy ? "Live" : "Idle", waiting: "Connected", off: "Offline" };
   if (mode === "watch") { $("conn-" + env).innerHTML = "<span class='dot " + (st === "waiting" ? "live" : st) + "'></span>" + text(label || words[st]); $("conn-" + env).className = "chip"; }
   const any = conn.base === "live" || conn.head === "live" ? "live" : conn.base === "off" && conn.head === "off" ? "off" : "connecting";
   $("tab-dot").className = "dot " + any;
@@ -434,9 +441,11 @@ $("takeover").onchange = () => {
   const on = $("takeover").checked;
   $("drive").hidden = !on;
   document.body.classList.toggle("driving", on);
+  // No picture yet (e.g. the runner restarted since the run): open the app so there is something to drive.
+  if (on && !(state && state.busy)) for (const env of ENVS) if (!frames[env] && healthy(env)) post("input", { env, action: "goto", path: startPage }).catch((e) => log("fail", "Take over failed", e.message));
 };
 async function drive(env, body) {
-  lastEnv = env;
+  lastEnv = env; touched = true;
   try { await post("input", Object.assign({ env: $("mirror").checked ? "both" : env }, body)); } catch (e) { log("fail", "Take over failed", e.message); }
 }
 for (const env of ENVS) {
@@ -484,6 +493,8 @@ $("reset").onclick = () => busy($("reset"), "Resetting…", async () => {
     if (state) state.knobs = { provider: "ok", latencyMs: 0 };
     $("provider").value = "ok"; $("latency").value = 0;
     results.base = results.head = null;
+    if (state) state.latest = {};
+    touched = false; latestSig = null;
     knobNote("ok", "Both sandboxes reset, provider ok");
     log("you", "You reset both sandboxes", "Fresh data, provider ok");
     for (const env of ENVS) if (preview[env].state !== "idle") ensurePreview(env, startPage, true);
@@ -494,6 +505,7 @@ $("reset").onclick = () => busy($("reset"), "Resetting…", async () => {
 const ACTION_WORDS = { order: "made a new order", pay: "clicked Pay", pay_twice: "clicked Pay twice at once", race: "paid twice at once" };
 async function act(env, action, btn) {
   const label = { order: "Ordering…", pay: "Paying…", pay_twice: "Paying ×2…", race: "Paying twice on both…" }[action];
+  touched = true;
   return busy(btn, label, async () => {
     const sides = env === "both" ? ENVS : [env];
     sides.forEach((e) => { pending[e] = true; });
@@ -504,6 +516,7 @@ async function act(env, action, btn) {
       if (action === "race" && mode !== "try" && !modeChosen) setMode("try");
       for (const r of out.results) {
         results[r.env] = r;
+        if (state && !r.error && r.orderId) { state.latest = state.latest || {}; state.latest[r.env] = { orderId: r.orderId, status: r.status, charges: r.charges || 0 }; }
         log(r.error ? "fail" : "you", "You " + ACTION_WORDS[action] + " on " + NAME[r.env], r.error ? r.error : summary(r));
         if (r.page && mode === "try") ensurePreview(r.env, r.page, true);
       }
@@ -514,6 +527,7 @@ async function act(env, action, btn) {
       narrate({ text: "That didn't work: " + e.message, prio: "high" });
     } finally {
       sides.forEach((e) => { pending[e] = false; });
+      poll();
     }
   });
 }
@@ -573,6 +587,9 @@ function paint() {
     $("idle").className = "chip" + (left != null && left <= 5 ? " warn" : "");
   }
   for (const id of ["apply", "reset"]) if (!$(id).querySelector(".spin")) $(id).disabled = !ready() || !!gone;
+  $("takeover").disabled = !ready() || !!gone || !!(s && s.busy);
+  if ($("takeover").disabled && $("takeover").checked) { $("takeover").checked = false; $("takeover").onchange(); }
+  $("takeover-wrap").title = s && s.busy ? "The agent is testing. Take over unlocks when it finishes." : "Click, scroll and type in the agent's browser yourself while the agent isn't testing";
   // hero: the obvious first action
   const showHero = !!s && s.quickActions && !gone;
   $("hero").hidden = !showHero;
@@ -582,11 +599,11 @@ function paint() {
   }
   // per-side scores + diff highlight
   for (const env of ENVS) {
-    const r = results[env];
+    const r = results[env], o = latestOf(env);
     const c = (s && s.counts && s.counts[env]) || {};
-    $("score-val-" + env).textContent = pending[env] ? "Working…" : !r ? (healthy(env) ? "No order yet" : sbWords(env)) : r.error ? "Error" : (r.status || "order " + r.orderId) + " · " + plural(r.charges == null ? 0 : r.charges, "charge");
-    $("score-val-" + env).title = r ? summary(r) : "";
-    $("score-sub-" + env).textContent = (r && !r.error ? "Order " + r.orderId + " · " : "") + "Total charges " + (c.charges == null ? "–" : c.charges) + " · Orders " + (c.orders == null ? "–" : c.orders);
+    $("score-val-" + env).textContent = pending[env] ? "Working…" : !healthy(env) ? sbWords(env) : !o ? "No order yet" : "Order #" + o.orderId + " · " + (o.status || "?") + " · " + plural(o.charges, "charge");
+    $("score-val-" + env).title = o ? "The newest order on " + NAME[env] + ", however it was made" : "";
+    $("score-sub-" + env).textContent = o && c.orders != null ? "Newest of " + plural(c.orders, "order") + " on this side" : "Pay twice on both, or click in the app below";
     $("res-" + env).textContent = pending[env] ? "Working…" : r ? summary(r) : "";
     $("res-" + env).title = r ? summary(r) : "";
     $("act-" + env).hidden = !(s && s.quickActions) || !!gone;
@@ -595,14 +612,18 @@ function paint() {
     $("dot-" + env).className = "dot " + st; $("dot-" + env).title = "sandbox " + st;
     $("sha-" + env).textContent = s && s.shas ? s.shas[env].slice(0, 7) : "";
   }
-  const a = results.base, b = results.head, cmp = $("compare");
-  let v = "Run an action to compare", k = "";
-  if (a && b && !a.error && !b.error) {
+  const a = latestOf("base"), b = latestOf("head"), cmp = $("compare");
+  const unpaid = (o) => !o.charges && (o.status || "pending") === "pending";
+  let v = "Pay twice on both to compare", k = "";
+  if (!touched) v = "Pay twice on both to compare";
+  else if (a && b && unpaid(a) && unpaid(b)) v = "Now pay on both sides";
+  else if (a && b && (unpaid(a) || unpaid(b))) v = "Now pay on the " + (unpaid(a) ? "base" : "PR") + " side too";
+  else if (a && b) {
     const diff = a.charges !== b.charges || (a.status || "") !== (b.status || "");
     k = diff ? "differ" : "same";
-    v = diff ? "Different! base " + plural(a.charges || 0, "charge") + ", PR " + plural(b.charges || 0, "charge") : "Same result on both";
-  } else if ((a && a.error) || (b && b.error)) v = "One side failed";
-  else if (a || b) v = "Now run it on the other side";
+    v = diff ? "Different! base " + plural(a.charges, "charge") + ", PR " + plural(b.charges, "charge") : "Same on both: " + (a.status || "?") + ", " + plural(a.charges, "charge");
+  } else if ((results.base && results.base.error) || (results.head && results.head.error)) v = "One side failed: see the timeline";
+  else if (a || b) v = "Now make an order on the other side";
   cmp.className = "compare " + k; $("verdict").textContent = v;
   for (const env of ENVS) $("pane-" + env).classList.toggle("differ", k === "differ");
   // screens
@@ -615,7 +636,7 @@ function paint() {
       if (frames[env]) overlay(env, null);
       else if (s && s.sandboxes[env] !== "healthy") overlay(env, sbOverlay(env));
       else if (conn[env] === "connecting") overlay(env, "<b>Connecting to the agent's browser…</b>");
-      else overlay(env, s && s.busy ? "<b>The agent is starting its browser…</b>" : "<b>The agent's browser is idle</b><span>Switch to Try it yourself to click the app.</span>");
+      else overlay(env, s && s.busy ? "<b>The agent is starting its browser…</b>" : "<b>The agent isn't testing right now</b><span>Tick Take over to drive this browser yourself, or switch to Try it yourself.</span>");
     } else {
       img.hidden = true;
       $("conn-" + env).className = "chip" + (p.state === "error" ? " bad" : "");
@@ -629,6 +650,8 @@ function paint() {
     }
   }
 }
+/** The newest order on one side (from /state, or the action that just ran), whoever made it. */
+function latestOf(env) { return state && state.latest && healthy(env) ? state.latest[env] || null : null; }
 function sbWords(env) { const st = state ? state.sandboxes[env] : "down"; return st === "building" ? "Starting…" : st === "failed" ? "Failed to start" : st === "healthy" ? "Up" : "Not running"; }
 function sbOverlay(env) {
   const st = state ? state.sandboxes[env] : "down";
@@ -640,6 +663,9 @@ function sbOverlay(env) {
 function render(s) {
   const first = !state;
   state = s;
+  const sig = JSON.stringify(s.latest || {});
+  if (latestSig !== null && sig !== latestSig) touched = true;
+  latestSig = sig;
   if (s.title) $("title").textContent = s.title;
   if (s.startPage) startPage = s.startPage;
   if (first && !modeChosen) setMode(s.busy || s.status === "RUNNING" || s.status === "PLANNING" || !s.quickActions ? "watch" : "try");
@@ -673,15 +699,18 @@ function render(s) {
   paint();
 }
 
-let pollTimer, misses = 0;
+let pollTimer, misses = 0, pollSeq = 0;
 async function poll() {
   clearTimeout(pollTimer);
   if (gone === "link") return;
+  const my = ++pollSeq;
   try {
     const res = await fetch(base + "state" + q + (lastTs ? "&after=" + encodeURIComponent(lastTs) : ""));
     if (res.status === 403) return expire("link");
     if (!res.ok) throw new Error(res.statusText);
-    render(await res.json());
+    const next = await res.json();
+    if (my !== pollSeq) return; // a newer poll is on its way
+    render(next);
     if (misses && !gone) banner();
     misses = 0;
   } catch (e) {

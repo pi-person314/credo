@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AppManifest, Env, Knobs } from "@pr-agent/contracts";
-import { QuickActions, RACE_KNOBS, hasQuickActions, withRaceKnobs } from "../src/view/actions.js";
+import { QuickActions, RACE_KNOBS, hasQuickActions, latestOrder, withRaceKnobs } from "../src/view/actions.js";
 
 const manifest: AppManifest = {
   api: ["POST /api/orders", "POST /api/pay", "GET /api/orders/:id"],
@@ -33,7 +33,8 @@ function fakeApp() {
       if (method === "GET" && path.startsWith("/api/orders/")) return { status: 200, body: { id: 1, status: "paid" } };
       return { status: 404, body: {} };
     },
-    db: async (_id: string, env: Env, _table: string, where: Record<string, unknown> = {}) => {
+    db: async (_id: string, env: Env, table: string, where: Record<string, unknown> = {}) => {
+      if (table === "orders") return { table, count: db[env].orders, rows: Array.from({ length: db[env].orders }, (_, i) => ({ id: i + 1, status: "pending" })) };
       const rows = db[env].charges.filter((c) => c.orderId === String(where.orderId));
       return { table: "charges", count: rows.length, rows };
     },
@@ -67,8 +68,17 @@ describe("quick actions", () => {
     expect(p).toMatchObject({ orderId: "1", charges: 1, pays: [200] });
     expect(calls).not.toContain("head POST /api/orders");
     qa.forget("s");
-    expect((await qa.run("s", "head", "pay", manifest, knobs)).orderId).toBe("1");
-    expect(calls).toContain("head POST /api/orders");
+    calls.length = 0;
+    expect((await qa.run("s", "base", "pay", manifest, knobs)).orderId).toBe("1");
+    expect(calls).toContain("base POST /api/orders");
+  });
+
+  it("pay targets the newest order in the app, even one made outside quick actions", async () => {
+    const { hooks } = fakeApp();
+    const qa = new QuickActions(hooks as never);
+    await qa.run("s", "head", "order", manifest, knobs);
+    await hooks.request("s", "head", "POST", "/api/orders"); // made by clicking in the app: order 2
+    expect(await qa.run("s", "head", "pay", manifest, knobs)).toMatchObject({ orderId: "2", charges: 1 });
   });
 
   it("reports a failure instead of throwing", async () => {
@@ -94,5 +104,18 @@ describe("quick actions", () => {
     set.length = 0;
     await withRaceKnobs(async (k) => void set.push(k), { ...RACE_KNOBS }, async () => 1);
     expect(set).toEqual([RACE_KNOBS]);
+  });
+});
+
+describe("latest order", () => {
+  it("picks the highest numeric id and counts only its charges", () => {
+    const orders = [{ id: 1, status: "paid" }, { id: 3, status: "pending" }, { id: 2, status: "paid" }];
+    const charges = [{ orderId: 1 }, { orderId: 3 }, { orderId: 3 }, { orderId: 2 }];
+    expect(latestOrder(orders, charges)).toEqual({ orderId: "3", status: "pending", charges: 2 });
+  });
+  it("falls back to the last row for non-numeric ids, and handles no orders or no charges", () => {
+    expect(latestOrder([{ id: "a" }, { id: "b", status: "paid" }], undefined)).toEqual({ orderId: "b", status: "paid", charges: 0 });
+    expect(latestOrder([], [])).toBeUndefined();
+    expect(latestOrder(undefined, undefined)).toBeUndefined();
   });
 });

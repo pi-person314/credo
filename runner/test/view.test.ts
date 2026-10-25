@@ -46,7 +46,7 @@ describe("browser routes", () => {
   });
   it("the page has both modes, the first action and no unescaped boot data", async () => {
     const html = (await app.inject(`/view/ses_1?t=${t}`)).body;
-    for (const s of ["Watch the agent", "Try it yourself", 'id="race"', "What the agent is doing", "prefers-color-scheme", 'id="narrate" aria-pressed="false"', "CredoNarration"]) expect(html).toContain(s);
+    for (const s of ["Agent's browser", "Try it yourself", 'id="race"', "Timeline", "Take over", "prefers-color-scheme", 'id="narrate" aria-pressed="false"', "CredoNarration"]) expect(html).toContain(s);
     expect(html.match(/<\/script>/g)).toHaveLength(1);
   });
 });
@@ -64,5 +64,13 @@ describe("quick actions route", () => {
     expect((await app.inject({ method: "POST", url: `/view/ses_1/action`, payload: { env: "both", action: "race" } })).statusCode).toBe(403);
     expect((await app.inject({ method: "POST", url: `/view/ses_1/action?t=${t}`, payload: { env: "both", action: "nope" } })).statusCode).toBe(400);
     expect((await app.inject({ method: "POST", url: `/view/ses_1/action?t=${t}`, payload: { env: "both", action: "race" } })).statusCode).toBe(404);
+  });
+});
+
+describe("page script", () => {
+  it("parses as JavaScript", async () => {
+    const html = (await app.inject(`/view/ses_1?t=${t}`)).body;
+    const js = html.slice(html.lastIndexOf("<script>") + 8, html.lastIndexOf("</script>"));
+    expect(() => new Function(js)).not.toThrow();
   });
 });
