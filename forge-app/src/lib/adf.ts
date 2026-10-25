@@ -1,5 +1,5 @@
 import type { Assertion, Diff, DiffClass, Recommendation, Report, Run, Scenario, Session, Step } from "../contracts/index";
-import { failureText, observedFailure } from "./honest";
+import { expectedText, failureText, groupRegressions, observedFailure } from "./honest";
 
 // Atlassian Document Format builders for Jira comments and Bug descriptions.
 // Wording rule: say what was checked and what was not. Never call a PR safe.
@@ -55,19 +55,8 @@ export function describeStep(step: Step): string {
   }
 }
 
-/** One assertion as the expected outcome. */
-export function describeAssertion(a: Assertion): string {
-  switch (a.type) {
-    case "db_count":
-      return `${a.table} has exactly ${a.equals} row(s) where ${json(a.where)}`;
-    case "http_status":
-      return `${a.ref} returns HTTP ${a.equals}`;
-    case "json_path":
-      return `${a.ref} ${a.path} equals ${json(a.equals)}`;
-    case "ui_text":
-      return `${a.selector} contains "${a.contains}"`;
-  }
-}
+/** One assertion as the expected outcome, in plain words (no "$order.id" placeholders). */
+export const describeAssertion = (a: Assertion): string => expectedText(a);
 
 // Counts line, one entry per base-vs-PR classification, so it matches the scenario list a reader sees.
 const CLASS_LABEL: [DiffClass, string, string][] = [
@@ -113,9 +102,27 @@ export function regressionText(scenarios: Scenario[], runs: Run[], id: string) {
   return `${lead} Passes on base, fails on PR (confirmed on rerun).${greptileNote(scenarios, id)}`;
 }
 
+/**
+ * Regression rows for the Jira and GitHub reports: scenarios failing the same check share one row,
+ * e.g. "PR: 5 charges for the order (expected 1). Seen in 3 scenarios: ...". `ids` is the row's scenarios.
+ */
+export function regressionRows(scenarios: Scenario[], runs: Run[], diffs: Diff[]): { ids: string[]; text: string }[] {
+  const ids = diffs.filter((d) => d.classification === "NEW_REGRESSION").map((d) => d.scenarioId);
+  return groupRegressions(scenarios, runs, ids).map((g) => {
+    if (g.ids.length === 1) return { ids: g.ids, text: regressionText(scenarios, runs, g.ids[0]!) };
+    const seen = observedFailure(scenarios.find((s) => s.id === g.ids[0]), runs, g.ids[0]);
+    const list = g.ids.map((id) => `${id} (${objective(scenarios, id)})`).join("; ");
+    const greptile = g.ids.some((id) => greptileNote(scenarios, id)) ? " Greptile flagged this too." : "";
+    return {
+      ids: g.ids,
+      text: `${seen ? `PR: ${seen}. ` : ""}Seen in ${g.ids.length} scenarios: ${list}. Each passes on base, fails on PR (confirmed on rerun).${greptile}`,
+    };
+  });
+}
+
 /** Jira comment body for a report. `runs` lets regressions say what broke. */
 export function reportAdf(session: Session, report: Report, scenarios: Scenario[], diffs: Diff[], runs: Run[] = []): Node {
-  const regressions = diffs.filter((d) => d.classification === "NEW_REGRESSION");
+  const regressions = regressionRows(scenarios, runs, diffs);
   const unclear = diffs.filter((d) => d.classification === "FLAKY" || d.classification === "INCONCLUSIVE" || d.classification === "EXISTING_FAILURE");
   const pr = session.prUrl ? link(`${session.repo}#${session.prNumber}`, session.prUrl) : text(`${session.repo}#${session.prNumber}`);
   return doc(
@@ -134,7 +141,7 @@ export function reportAdf(session: Session, report: Report, scenarios: Scenario[
       : para(text("No acceptance criteria found on the issue.")),
     heading(4, "Regressions"),
     regressions.length
-      ? bullets(regressions.map((d) => [code(d.scenarioId), text(` ${regressionText(scenarios, runs, d.scenarioId)}`)]))
+      ? bullets(regressions.map((r) => [code(r.ids.join(", ")), text(` ${r.text}`)]))
       : para(text("None found in the scenarios that ran.")),
     ...(unclear.length
       ? [heading(4, "Needs a look"), bullets(unclear.map((d) => [code(d.scenarioId), text(` ${objective(scenarios, d.scenarioId)}: ${d.classification} (base ${d.base}, PR ${d.head}).`)]))]

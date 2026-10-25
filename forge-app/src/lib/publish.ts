@@ -3,7 +3,7 @@ import { kvs } from "@forge/kvs";
 import { createHash } from "node:crypto";
 import type { Route } from "@forge/api";
 import type { Actor, AuditEntry, Diff, EventType, Recommendation, Report, Run, Scenario, Session } from "../contracts/index";
-import { bugAdf, diffSummary, notTested, regressionText, reportAdf, VERDICT_LABEL, type Evidence } from "./adf";
+import { bugAdf, diffSummary, notTested, regressionRows, reportAdf, VERDICT_LABEL, type Evidence } from "./adf";
 import { bugSummary } from "./honest";
 import { hasGithubToken, postPrComment, setCommitStatus, updatePrComment, type StatusState } from "./github-write";
 import { signSessionToken } from "../contracts/token";
@@ -77,7 +77,7 @@ function statusFor(report: Report, diffs: Diff[]): { state: StatusState; descrip
 /** GitHub PR comment body. The hidden marker lets people (and us) find it. */
 export function reportMarkdown(session: Session, report: Report, scenarios: Scenario[], diffs: Diff[], issueUrl?: string, runs: Run[] = []) {
   const issue = issueUrl ? `[${session.issueKey}](${issueUrl})` : session.issueKey;
-  const regressions = diffs.filter((d) => d.classification === "NEW_REGRESSION");
+  const regressions = regressionRows(scenarios, runs, diffs);
   const rows = report.coverage.map((c) => `| AC${c.index} | ${c.text.replace(/\|/g, "\\|")} | **${c.status}** | ${c.scenarioIds.join(", ") || "none"} |`);
   return [
     `<!-- pr-confidence:session=${session.id} -->`,
@@ -90,7 +90,7 @@ export function reportMarkdown(session: Session, report: Report, scenarios: Scen
     "",
     "#### Regressions",
     regressions.length
-      ? regressions.map((d) => `- \`${d.scenarioId}\` ${regressionText(scenarios, runs, d.scenarioId)}`).join("\n")
+      ? regressions.map((r) => `- ${r.ids.map((id) => `\`${id}\``).join(", ")} ${r.text}`).join("\n")
       : "None found in the scenarios that ran.",
     "",
     "#### What was not tested",
