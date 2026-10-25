@@ -42,7 +42,12 @@ describe("browser routes", () => {
   });
   it("state works for an unknown session", async () => {
     const res = await app.inject(`/view/ses_1/state?t=${t}`);
-    expect(res.json()).toMatchObject({ status: "UNKNOWN", sandboxes: { base: "down", head: "down" } });
+    expect(res.json()).toMatchObject({ status: "UNKNOWN", sandboxes: { base: "down", head: "down" }, quickActions: false, idleTtlMin: config.idleTtlMin });
+  });
+  it("the page has both modes, the first action and no unescaped boot data", async () => {
+    const html = (await app.inject(`/view/ses_1?t=${t}`)).body;
+    for (const s of ["Watch the agent", "Try it yourself", 'id="race"', "What the agent is doing", "prefers-color-scheme"]) expect(html).toContain(s);
+    expect(html.match(/<\/script>/g)).toHaveLength(1);
   });
 });
 
@@ -51,5 +56,13 @@ describe("take over", () => {
     expect((await app.inject({ method: "POST", url: `/view/ses_1/input`, payload: { env: "base", action: "click" } })).statusCode).toBe(403);
     expect((await app.inject({ method: "POST", url: `/view/ses_1/input?t=${t}`, payload: { env: "base", action: "click" } })).statusCode).toBe(404);
     expect((await app.inject({ method: "POST", url: `/view/ses_1/input?t=${t}`, payload: { env: "x", action: "click" } })).statusCode).toBe(400);
+  });
+});
+
+describe("quick actions route", () => {
+  it("needs a token and a known session, and validates input", async () => {
+    expect((await app.inject({ method: "POST", url: `/view/ses_1/action`, payload: { env: "both", action: "race" } })).statusCode).toBe(403);
+    expect((await app.inject({ method: "POST", url: `/view/ses_1/action?t=${t}`, payload: { env: "both", action: "nope" } })).statusCode).toBe(400);
+    expect((await app.inject({ method: "POST", url: `/view/ses_1/action?t=${t}`, payload: { env: "both", action: "race" } })).statusCode).toBe(404);
   });
 });
