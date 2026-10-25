@@ -43,6 +43,28 @@ export interface SideResult {
   error?: string;
 }
 
+/** The newest order in one sandbox and its charges, however it was made (quick action, the app preview, take over). */
+export interface LatestOrder {
+  orderId: string;
+  status?: string;
+  charges: number;
+}
+
+/** Picks the newest order (highest numeric id, else the last row) and counts its charges. */
+export function latestOrder(orders: Record<string, unknown>[] | undefined, charges: Record<string, unknown>[] | undefined): LatestOrder | undefined {
+  if (!orders?.length) return undefined;
+  const id = (r: Record<string, unknown>) => pick(r, "id", "orderId");
+  const num = (r: Record<string, unknown>) => Number(id(r));
+  const newest = orders.every((r) => Number.isFinite(num(r))) ? orders.reduce((a, b) => (num(b) > num(a) ? b : a)) : orders[orders.length - 1]!;
+  const orderId = String(id(newest));
+  const status = pick(newest, "status");
+  return {
+    orderId,
+    status: status === undefined ? undefined : String(status),
+    charges: (charges ?? []).filter((c) => String(pick(c, "orderId", "order_id")) === orderId).length,
+  };
+}
+
 type Hooks = Pick<SandboxManager, "request" | "db" | "seed" | "setKnobs">;
 
 export function hasQuickActions(m: AppManifest | undefined): boolean {

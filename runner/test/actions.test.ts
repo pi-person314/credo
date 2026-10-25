@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AppManifest, Env, Knobs } from "@pr-agent/contracts";
-import { QuickActions, RACE_KNOBS, hasQuickActions, withRaceKnobs } from "../src/view/actions.js";
+import { QuickActions, RACE_KNOBS, hasQuickActions, latestOrder, withRaceKnobs } from "../src/view/actions.js";
 
 const manifest: AppManifest = {
   api: ["POST /api/orders", "POST /api/pay", "GET /api/orders/:id"],
@@ -94,5 +94,18 @@ describe("quick actions", () => {
     set.length = 0;
     await withRaceKnobs(async (k) => void set.push(k), { ...RACE_KNOBS }, async () => 1);
     expect(set).toEqual([RACE_KNOBS]);
+  });
+});
+
+describe("latest order", () => {
+  it("picks the highest numeric id and counts only its charges", () => {
+    const orders = [{ id: 1, status: "paid" }, { id: 3, status: "pending" }, { id: 2, status: "paid" }];
+    const charges = [{ orderId: 1 }, { orderId: 3 }, { orderId: 3 }, { orderId: 2 }];
+    expect(latestOrder(orders, charges)).toEqual({ orderId: "3", status: "pending", charges: 2 });
+  });
+  it("falls back to the last row for non-numeric ids, and handles no orders or no charges", () => {
+    expect(latestOrder([{ id: "a" }, { id: "b", status: "paid" }], undefined)).toEqual({ orderId: "b", status: "paid", charges: 0 });
+    expect(latestOrder([], [])).toBeUndefined();
+    expect(latestOrder(undefined, undefined)).toBeUndefined();
   });
 });

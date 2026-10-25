@@ -9,7 +9,7 @@ import { signSessionToken, verifySessionToken } from "@pr-agent/contracts/token"
 import type { AgentFrame } from "../executor/browser.js";
 import { toPlaywrightSpec } from "../export/playwright.js";
 import type { Runtime } from "../runtime.js";
-import { QuickAction, QuickActions, hasQuickActions, withRaceKnobs } from "./actions.js";
+import { QuickAction, QuickActions, hasQuickActions, latestOrder, withRaceKnobs, type LatestOrder } from "./actions.js";
 import { viewPage } from "./page.js";
 
 /** P1 take-over: the reviewer drives the agent's browser from the live view. x/y are 0..1 of the frame. */
@@ -86,13 +86,14 @@ export async function viewRoutes(app: FastifyInstance, rt: Runtime) {
     const s = orchestrator.has(id) ? orchestrator.get(id) : undefined;
     const status = sandboxes.status(id);
     const counts: Record<string, { orders?: number; charges?: number }> = {};
+    const latest: Record<string, LatestOrder | undefined> = {};
     for (const env of ["base", "head"] as const) {
       if (status[env] !== "healthy") continue;
       const tables = s?.context.manifest.tables ?? [];
-      counts[env] = {};
-      for (const t of ["orders", "charges"] as const) {
-        if (tables.includes(t)) counts[env]![t] = await sandboxes.db(id, env, t).then((r) => r.count).catch(() => undefined);
-      }
+      const rows = async (t: string) => (tables.includes(t) ? await sandboxes.db(id, env, t).catch(() => undefined) : undefined);
+      const [orders, charges] = await Promise.all([rows("orders"), rows("charges")]);
+      counts[env] = { orders: orders?.count, charges: charges?.count };
+      latest[env] = latestOrder(orders?.rows, charges?.rows);
     }
     return {
       sessionId: id,
@@ -107,6 +108,7 @@ export async function viewRoutes(app: FastifyInstance, rt: Runtime) {
       idleTtlMin: cfg.idleTtlMin,
       lastActiveAt: sandboxes.lastActive(id),
       counts,
+      latest,
       scenarios: s?.scenarios.map((x) => ({ id: x.id, objective: x.objective, origin: x.origin, sourceRefs: x.sourceRefs })) ?? [],
       diffs: s?.diffs ?? [],
       events: memory.events(id, req.query.after).slice(-60),
@@ -139,7 +141,8 @@ export async function viewRoutes(app: FastifyInstance, rt: Runtime) {
     for (const env of envs) if (sandboxes.status(id)[env] !== "healthy") return reply.code(409).send({ error: `${env} sandbox is ${sandboxes.status(id)[env]}` });
     const go = (knobs: Knobs) => Promise.all(envs.map((env) => quick.run(id, env, body.action, s.context.manifest, knobs)));
     // "race" runs on slow knobs, then restores the reviewer's knobs.
-    const results = body.action === "race" ? await withRaceKnobs((k) => orchestrator.knobs(id, k), { ...s.knobs }, go) : await go(s.knobs);
+    // The temporary knob changes go straight to the sandboxes: the session's knobs and the timeline keep what the reviewer set.
+    const results = body.action === "race" ? await withRaceKnobs((k) => sandboxes.setKnobsBoth(id, k), { ...s.knobs }, go) : await go(s.knobs);
     return { ok: true, knobs: s.knobs, results };
   });
 

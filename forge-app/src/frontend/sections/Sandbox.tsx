@@ -48,9 +48,11 @@ export const Sandbox = ({ viewUrl, disabled, expired, onKnobs, onReset }: Props)
       </Stack>
     );
 
+  // The embedded live view has its own knobs and reset, which show the current value, so don't repeat them here.
+  const embedded = embed && !!viewUrl;
   return (
     <Stack space="space.200">
-      <Inline space="space.200" alignBlock="end" shouldWrap>
+      {embedded ? null : <Inline space="space.200" alignBlock="end" shouldWrap>
         <Stack space="space.050">
           <Label labelFor="knob-provider">Payment provider</Label>
           <Select
@@ -79,7 +81,7 @@ export const Sandbox = ({ viewUrl, disabled, expired, onKnobs, onReset }: Props)
         <Button iconBefore="refresh" onClick={onReset} isDisabled={disabled}>
           Reset sandboxes
         </Button>
-      </Inline>
+      </Inline>}
       <Inline space="space.200" alignBlock="center" shouldWrap>
         {viewUrl ? (
           <LinkButton href={viewUrl} target="_blank">
