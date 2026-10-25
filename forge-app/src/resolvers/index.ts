@@ -55,6 +55,11 @@ resolver.define("reset", async ({ payload, context }) => {
   return sessionId ? actions.resetSandboxes(sessionId) : denied;
 });
 
+resolver.define("rerun", async ({ payload, context }) => {
+  const sessionId = await ownSessionId(payload, context);
+  return sessionId ? actions.rerun(sessionId) : denied;
+});
+
 // The click itself is the approval; the clicking user is recorded as approver.
 resolver.define("fileBug", async ({ payload, context }) => {
   const sessionId = await ownSessionId(payload, context);

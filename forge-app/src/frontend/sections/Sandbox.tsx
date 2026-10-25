@@ -9,6 +9,8 @@ type Props = {
   expired: { reason?: string } | null;
   onKnobs: (k: Knobs) => Promise<void>;
   onReset: () => void;
+  onRerun: () => void;
+  canRerun: boolean;
 };
 
 const MODES: ProviderMode[] = ["ok", "slow", "timeout", "error"];
@@ -16,7 +18,7 @@ const options = MODES.map((m) => ({ label: m, value: m }));
 
 // Knobs (always hit both sandboxes), Reset, and the runner's live view.
 // The embed is a Custom UI resource ("live-view") inside UI Kit <Frame>; the link is the fallback.
-export const Sandbox = ({ viewUrl, disabled, expired, onKnobs, onReset }: Props) => {
+export const Sandbox = ({ viewUrl, disabled, expired, onKnobs, onReset, onRerun, canRerun }: Props) => {
   const [provider, setProvider] = useState<ProviderMode>("ok");
   const [latency, setLatency] = useState("0");
   const [embed, setEmbed] = useState(true);
@@ -35,16 +37,19 @@ export const Sandbox = ({ viewUrl, disabled, expired, onKnobs, onReset }: Props)
         <SectionMessage appearance="information" title="Sandboxes are shut down">
           <Stack space="space.050">
             <Text>{expired.reason ?? "The runner no longer has this session (it may have restarted)."}</Text>
-            <Text size="small">Push a commit to the PR to start a fresh run.</Text>
+            <Text size="small">Run again to rebuild them on the same commit.</Text>
           </Stack>
         </SectionMessage>
-        {viewUrl ? (
-          <Inline>
+        <Inline space="space.100">
+          <Button appearance="primary" iconBefore="vid-play" onClick={onRerun} isDisabled={!canRerun}>
+            {canRerun ? "Run again" : "Starting…"}
+          </Button>
+          {viewUrl ? (
             <LinkButton href={viewUrl} target="_blank">
               Open live sandbox
             </LinkButton>
-          </Inline>
-        ) : null}
+          ) : null}
+        </Inline>
       </Stack>
     );
 

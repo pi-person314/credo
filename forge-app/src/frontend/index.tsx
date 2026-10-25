@@ -27,6 +27,7 @@ import { Tests } from "./sections/Tests";
 
 // The Credo issue panel. Layout from docs/SPEC.md section 6.
 // UI Kit only: no <div>, no third-party React components.
+const RERUN_WAIT_MS = 60_000;
 type Notice = { kind: "success" | "error"; text: string } | null;
 
 const Loading = () => (
@@ -40,6 +41,8 @@ const App = () => {
   const { detail, events, viewUrl, error, reconnecting, kick, retry } = usePanel();
   const [notice, setNotice] = useState<Notice>(null);
   const [resetting, setResetting] = useState(false);
+  // Run again was clicked on this session at this time; the button waits for the new session (or a minute).
+  const [rerunFrom, setRerunFrom] = useState<{ id: string; at: number } | null>(null);
   // Set when a runner call came back 404 (runner forgot the session): which session, and the event count then.
   const [gone, setGone] = useState<{ id: string; at: number } | null>(null);
 
@@ -88,6 +91,12 @@ const App = () => {
     await act(() => api.reset(id), "Both sandboxes reseeded to the same fixture.");
     setResetting(false);
   };
+  const rerunning = rerunFrom?.id === id && Date.now() - rerunFrom.at < RERUN_WAIT_MS;
+  const onRerun = async () => {
+    setRerunFrom({ id, at: Date.now() });
+    const ok = await act(() => api.rerun(id), "Starting a fresh run on the same commit. The panel switches to it in a few seconds.");
+    if (!ok) setRerunFrom(null);
+  };
   const onKnobs = async (k: Knobs) => {
     await act(() => api.setKnobs(id, k), `Provider set to ${k.provider} (${k.latencyMs} ms) on both sandboxes.`);
   };
@@ -109,7 +118,15 @@ const App = () => {
 
   return (
     <Stack space="space.200">
-      <Header detail={detail} events={events} busy={busy} onReset={onReset} canReset={sandboxUp && !resetting} />
+      <Header
+        detail={detail}
+        events={events}
+        busy={busy}
+        onReset={onReset}
+        canReset={sandboxUp && !resetting}
+        onRerun={onRerun}
+        canRerun={!rerunning}
+      />
       {reconnecting ? (
         <SectionMessage appearance="warning" title="Reconnecting…">
           <Stack space="space.100">
@@ -137,7 +154,15 @@ const App = () => {
           <Criteria detail={detail} />
         </TabPanel>
         <TabPanel>
-          <Sandbox viewUrl={viewUrl} disabled={!sandboxUp || resetting} expired={expired} onKnobs={onKnobs} onReset={onReset} />
+          <Sandbox
+            viewUrl={viewUrl}
+            disabled={!sandboxUp || resetting}
+            expired={expired}
+            onKnobs={onKnobs}
+            onReset={onReset}
+            onRerun={onRerun}
+            canRerun={!rerunning}
+          />
         </TabPanel>
         <TabPanel>
           <Stack space="space.300">

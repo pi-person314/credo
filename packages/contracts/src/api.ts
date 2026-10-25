@@ -50,6 +50,7 @@ export const PanelResolvers = [
   "ask", // { sessionId, prompt }
   "setKnobs", // { sessionId, provider, latencyMs }
   "reset", // { sessionId }
+  "rerun", // { sessionId }  new session for the same PR head (Run again)
   "fileBug", // { sessionId, scenarioId }  click = human approval
   "approveTransition", // { sessionId }        click = human approval
   "getViewUrl", // { sessionId } -> signed runner /view URL
