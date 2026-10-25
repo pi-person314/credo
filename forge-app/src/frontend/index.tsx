@@ -25,14 +25,14 @@ import { Regression } from "./sections/Regression";
 import { Sandbox } from "./sections/Sandbox";
 import { Tests } from "./sections/Tests";
 
-// The PR Confidence issue panel. Layout from docs/SPEC.md section 6.
+// The Credo issue panel. Layout from docs/SPEC.md section 6.
 // UI Kit only: no <div>, no third-party React components.
 type Notice = { kind: "success" | "error"; text: string } | null;
 
 const Loading = () => (
   <Inline space="space.100" alignBlock="center">
     <Spinner size="small" label="Loading" />
-    <Text>Loading PR Confidence…</Text>
+    <Text>Loading Credo…</Text>
   </Inline>
 );
 
@@ -45,7 +45,7 @@ const App = () => {
 
   if (detail === undefined)
     return error ? (
-      <SectionMessage appearance="error" title="Could not load PR Confidence">
+      <SectionMessage appearance="error" title="Could not load Credo">
         <Stack space="space.100">
           <Text>{error}</Text>
           <Inline>

@@ -2,14 +2,14 @@
   "name": "pr-confidence-forge",
   "version": "0.1.0",
   "private": true,
-  "description": "PR Confidence: a Jira Forge app that verifies PRs against their ticket in live base-vs-PR sandboxes.",
+  "description": "Credo: a Jira Forge app that verifies PRs against their ticket in live base-vs-PR sandboxes.",
   "main": "src/index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "../node_modules/.bin/vitest run --root .",
     "deploy": "forge deploy",
     "tunnel": "forge tunnel",
-    "lint": "forge lint"
+    "lint": "forge lint",
+    "test": "vitest run"
   },
   "dependencies": {
     "@forge/api": "^8.3.0",
@@ -24,6 +24,7 @@
   "devDependencies": {
     "@types/node": "22.10.2",
     "@types/react": "18.3.12",
-    "typescript": "5.6.3"
+    "typescript": "5.6.3",
+    "vitest": "2.1.8"
   }
 }
