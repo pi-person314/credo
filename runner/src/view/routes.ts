@@ -142,7 +142,7 @@ export async function viewRoutes(app: FastifyInstance, rt: Runtime) {
     const go = (knobs: Knobs) => Promise.all(envs.map((env) => quick.run(id, env, body.action, s.context.manifest, knobs)));
     // "race" runs on slow knobs, then restores the reviewer's knobs.
     // The temporary knob changes go straight to the sandboxes: the session's knobs and the timeline keep what the reviewer set.
-    const results = body.action === "race" ? await withRaceKnobs((k) => sandboxes.setKnobsBoth(id, k), { ...s.knobs }, go) : await go(s.knobs);
+    const results = body.action === "race" ? await withRaceKnobs(async (k) => { await sandboxes.setKnobsBoth(id, k); }, { ...s.knobs }, go) : await go(s.knobs);
     return { ok: true, knobs: s.knobs, results };
   });
 
