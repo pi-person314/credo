@@ -9,7 +9,7 @@ import { signSessionToken, verifySessionToken } from "@pr-agent/contracts/token"
 import type { AgentFrame } from "../executor/browser.js";
 import { toPlaywrightSpec } from "../export/playwright.js";
 import type { Runtime } from "../runtime.js";
-import { QuickAction, QuickActions, hasQuickActions, latestOrder, withRaceKnobs, type LatestOrder } from "./actions.js";
+import { QuickAction, QuickActions, RACE_KNOBS, hasQuickActions, latestOrder, withRaceKnobs, type LatestOrder } from "./actions.js";
 import { viewPage } from "./page.js";
 
 /** P1 take-over: the reviewer drives the agent's browser from the live view. x/y are 0..1 of the frame. */
@@ -142,7 +142,8 @@ export async function viewRoutes(app: FastifyInstance, rt: Runtime) {
     const go = (knobs: Knobs) => Promise.all(envs.map((env) => quick.run(id, env, body.action, s.context.manifest, knobs)));
     // "race" runs on slow knobs, then restores the reviewer's knobs.
     // The temporary knob changes go straight to the sandboxes: the session's knobs and the timeline keep what the reviewer set.
-    const results = body.action === "race" ? await withRaceKnobs(async (k) => { await sandboxes.setKnobsBoth(id, k); }, { ...s.knobs }, go) : await go(s.knobs);
+    // The restore applies the session's knobs as they are now, in case the reviewer changed them during the race.
+    const results = body.action === "race" ? await withRaceKnobs(async (k) => { await sandboxes.setKnobsBoth(id, k === RACE_KNOBS ? k : s.knobs); }, { ...s.knobs }, go) : await go(s.knobs);
     return { ok: true, knobs: s.knobs, results };
   });
 

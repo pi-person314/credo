@@ -33,7 +33,8 @@ function fakeApp() {
       if (method === "GET" && path.startsWith("/api/orders/")) return { status: 200, body: { id: 1, status: "paid" } };
       return { status: 404, body: {} };
     },
-    db: async (_id: string, env: Env, _table: string, where: Record<string, unknown> = {}) => {
+    db: async (_id: string, env: Env, table: string, where: Record<string, unknown> = {}) => {
+      if (table === "orders") return { table, count: db[env].orders, rows: Array.from({ length: db[env].orders }, (_, i) => ({ id: i + 1, status: "pending" })) };
       const rows = db[env].charges.filter((c) => c.orderId === String(where.orderId));
       return { table: "charges", count: rows.length, rows };
     },
@@ -67,8 +68,17 @@ describe("quick actions", () => {
     expect(p).toMatchObject({ orderId: "1", charges: 1, pays: [200] });
     expect(calls).not.toContain("head POST /api/orders");
     qa.forget("s");
-    expect((await qa.run("s", "head", "pay", manifest, knobs)).orderId).toBe("1");
-    expect(calls).toContain("head POST /api/orders");
+    calls.length = 0;
+    expect((await qa.run("s", "base", "pay", manifest, knobs)).orderId).toBe("1");
+    expect(calls).toContain("base POST /api/orders");
+  });
+
+  it("pay targets the newest order in the app, even one made outside quick actions", async () => {
+    const { hooks } = fakeApp();
+    const qa = new QuickActions(hooks as never);
+    await qa.run("s", "head", "order", manifest, knobs);
+    await hooks.request("s", "head", "POST", "/api/orders"); // made by clicking in the app: order 2
+    expect(await qa.run("s", "head", "pay", manifest, knobs)).toMatchObject({ orderId: "2", charges: 1 });
   });
 
   it("reports a failure instead of throwing", async () => {

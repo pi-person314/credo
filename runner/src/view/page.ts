@@ -283,6 +283,7 @@ const NAME = { base: "base", head: "PR" };
 const text = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => "&#" + c.charCodeAt(0) + ";");
 const base = "/view/" + encodeURIComponent(BOOT.id) + "/";
 
+let touched = false, latestSig = null;
 let mode = "watch", modeChosen = false, state = null, gone = null, startPage = "/", lastTs, showAll = false;
 const events = [], seen = new Set();
 const results = { base: null, head: null };
@@ -444,7 +445,7 @@ $("takeover").onchange = () => {
   if (on && !(state && state.busy)) for (const env of ENVS) if (!frames[env] && healthy(env)) post("input", { env, action: "goto", path: startPage }).catch((e) => log("fail", "Take over failed", e.message));
 };
 async function drive(env, body) {
-  lastEnv = env;
+  lastEnv = env; touched = true;
   try { await post("input", Object.assign({ env: $("mirror").checked ? "both" : env }, body)); } catch (e) { log("fail", "Take over failed", e.message); }
 }
 for (const env of ENVS) {
@@ -493,6 +494,7 @@ $("reset").onclick = () => busy($("reset"), "Resetting…", async () => {
     $("provider").value = "ok"; $("latency").value = 0;
     results.base = results.head = null;
     if (state) state.latest = {};
+    touched = false; latestSig = null;
     knobNote("ok", "Both sandboxes reset, provider ok");
     log("you", "You reset both sandboxes", "Fresh data, provider ok");
     for (const env of ENVS) if (preview[env].state !== "idle") ensurePreview(env, startPage, true);
@@ -503,6 +505,7 @@ $("reset").onclick = () => busy($("reset"), "Resetting…", async () => {
 const ACTION_WORDS = { order: "made a new order", pay: "clicked Pay", pay_twice: "clicked Pay twice at once", race: "paid twice at once" };
 async function act(env, action, btn) {
   const label = { order: "Ordering…", pay: "Paying…", pay_twice: "Paying ×2…", race: "Paying twice on both…" }[action];
+  touched = true;
   return busy(btn, label, async () => {
     const sides = env === "both" ? ENVS : [env];
     sides.forEach((e) => { pending[e] = true; });
@@ -585,6 +588,7 @@ function paint() {
   }
   for (const id of ["apply", "reset"]) if (!$(id).querySelector(".spin")) $(id).disabled = !ready() || !!gone;
   $("takeover").disabled = !ready() || !!gone || !!(s && s.busy);
+  if ($("takeover").disabled && $("takeover").checked) { $("takeover").checked = false; $("takeover").onchange(); }
   $("takeover-wrap").title = s && s.busy ? "The agent is testing. Take over unlocks when it finishes." : "Click, scroll and type in the agent's browser yourself while the agent isn't testing";
   // hero: the obvious first action
   const showHero = !!s && s.quickActions && !gone;
@@ -609,13 +613,17 @@ function paint() {
     $("sha-" + env).textContent = s && s.shas ? s.shas[env].slice(0, 7) : "";
   }
   const a = latestOf("base"), b = latestOf("head"), cmp = $("compare");
-  let v = "Pay on both sides to compare", k = "";
-  if ((results.base && results.base.error) || (results.head && results.head.error)) v = "One side failed: see the timeline";
+  const unpaid = (o) => !o.charges && (o.status || "pending") === "pending";
+  let v = "Pay twice on both to compare", k = "";
+  if (!touched) v = "Pay twice on both to compare";
+  else if (a && b && unpaid(a) && unpaid(b)) v = "Now pay on both sides";
+  else if (a && b && (unpaid(a) || unpaid(b))) v = "Now pay on the " + (unpaid(a) ? "base" : "PR") + " side too";
   else if (a && b) {
     const diff = a.charges !== b.charges || (a.status || "") !== (b.status || "");
     k = diff ? "differ" : "same";
     v = diff ? "Different! base " + plural(a.charges, "charge") + ", PR " + plural(b.charges, "charge") : "Same on both: " + (a.status || "?") + ", " + plural(a.charges, "charge");
-  } else if (a || b) v = "Now make an order on the other side";
+  } else if ((results.base && results.base.error) || (results.head && results.head.error)) v = "One side failed: see the timeline";
+  else if (a || b) v = "Now make an order on the other side";
   cmp.className = "compare " + k; $("verdict").textContent = v;
   for (const env of ENVS) $("pane-" + env).classList.toggle("differ", k === "differ");
   // screens
@@ -655,6 +663,9 @@ function sbOverlay(env) {
 function render(s) {
   const first = !state;
   state = s;
+  const sig = JSON.stringify(s.latest || {});
+  if (latestSig !== null && sig !== latestSig) touched = true;
+  latestSig = sig;
   if (s.title) $("title").textContent = s.title;
   if (s.startPage) startPage = s.startPage;
   if (first && !modeChosen) setMode(s.busy || s.status === "RUNNING" || s.status === "PLANNING" || !s.quickActions ? "watch" : "try");
@@ -688,15 +699,18 @@ function render(s) {
   paint();
 }
 
-let pollTimer, misses = 0;
+let pollTimer, misses = 0, pollSeq = 0;
 async function poll() {
   clearTimeout(pollTimer);
   if (gone === "link") return;
+  const my = ++pollSeq;
   try {
     const res = await fetch(base + "state" + q + (lastTs ? "&after=" + encodeURIComponent(lastTs) : ""));
     if (res.status === 403) return expire("link");
     if (!res.ok) throw new Error(res.statusText);
-    render(await res.json());
+    const next = await res.json();
+    if (my !== pollSeq) return; // a newer poll is on its way
+    render(next);
     if (misses && !gone) banner();
     misses = 0;
   } catch (e) {
