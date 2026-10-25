@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Button, Inline, SectionMessage, Stack, Text } from "@forge/react";
 import type { SessionDetail } from "../../contracts";
+import { regressionHeadline } from "../../lib/honest";
 import { hasRegression, regressions, scenarioName } from "../ui";
 
 type Props = {
@@ -30,7 +31,12 @@ export const Regression = ({ detail, onFileBug, onMoveBack }: Props) => {
       <Stack space="space.100">
         {regressions(detail).map((id) => (
           <Inline key={id} space="space.100" alignBlock="center" spread="space-between">
-            <Text>{scenarioName(detail, id)}</Text>
+            <Stack space="space.025">
+              <Text weight="bold">{regressionHeadline(detail.scenarios.find((s) => s.id === id), detail.runs, id)}</Text>
+              <Text size="small">
+                {id}: {scenarioName(detail, id)}
+              </Text>
+            </Stack>
             <Button
               appearance="danger"
               onClick={() => run(id, () => onFileBug(id))}

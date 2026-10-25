@@ -3,7 +3,8 @@ import { kvs } from "@forge/kvs";
 import { createHash } from "node:crypto";
 import type { Route } from "@forge/api";
 import type { Actor, AuditEntry, Diff, EventType, Recommendation, Report, Run, Scenario, Session } from "../contracts/index";
-import { bugAdf, greptileNote, diffSummary, notTested, reportAdf, VERDICT_LABEL, type Evidence } from "./adf";
+import { bugAdf, diffSummary, notTested, regressionText, reportAdf, VERDICT_LABEL, type Evidence } from "./adf";
+import { bugSummary } from "./honest";
 import { hasGithubToken, postPrComment, setCommitStatus, updatePrComment, type StatusState } from "./github-write";
 import { signSessionToken } from "../contracts/token";
 import { appendAudit, appendEvents, keys } from "./store";
@@ -74,8 +75,7 @@ function statusFor(report: Report, diffs: Diff[]): { state: StatusState; descrip
 }
 
 /** GitHub PR comment body. The hidden marker lets people (and us) find it. */
-export function reportMarkdown(session: Session, report: Report, scenarios: Scenario[], diffs: Diff[], issueUrl?: string) {
-  const name = (id: string) => scenarios.find((s) => s.id === id)?.objective ?? id;
+export function reportMarkdown(session: Session, report: Report, scenarios: Scenario[], diffs: Diff[], issueUrl?: string, runs: Run[] = []) {
   const issue = issueUrl ? `[${session.issueKey}](${issueUrl})` : session.issueKey;
   const regressions = diffs.filter((d) => d.classification === "NEW_REGRESSION");
   const rows = report.coverage.map((c) => `| AC${c.index} | ${c.text.replace(/\|/g, "\\|")} | **${c.status}** | ${c.scenarioIds.join(", ") || "none"} |`);
@@ -90,7 +90,7 @@ export function reportMarkdown(session: Session, report: Report, scenarios: Scen
     "",
     "#### Regressions",
     regressions.length
-      ? regressions.map((d) => `- \`${d.scenarioId}\` ${name(d.scenarioId)}: passes on base, fails on this PR (confirmed on rerun).${greptileNote(scenarios, d.scenarioId)}`).join("\n")
+      ? regressions.map((d) => `- \`${d.scenarioId}\` ${regressionText(scenarios, runs, d.scenarioId)}`).join("\n")
       : "None found in the scenarios that ran.",
     "",
     "#### What was not tested",
@@ -100,8 +100,8 @@ export function reportMarkdown(session: Session, report: Report, scenarios: Scen
   ].join("\n");
 }
 
-async function publishJira(session: Session, report: Report, scenarios: Scenario[], diffs: Diff[], prior?: string) {
-  const body = { body: reportAdf(session, report, scenarios, diffs) };
+async function publishJira(session: Session, report: Report, scenarios: Scenario[], diffs: Diff[], runs: Run[], prior?: string) {
+  const body = { body: reportAdf(session, report, scenarios, diffs, runs) };
   if (prior) {
     try {
       return (await jira<{ id: string }>("PUT", route`/rest/api/3/issue/${session.issueKey}/comment/${prior}`, body)).id;
@@ -112,9 +112,9 @@ async function publishJira(session: Session, report: Report, scenarios: Scenario
   return (await jira<{ id: string }>("POST", route`/rest/api/3/issue/${session.issueKey}/comment`, body)).id;
 }
 
-async function publishGithub(session: Session, report: Report, scenarios: Scenario[], diffs: Diff[], prior?: number) {
+async function publishGithub(session: Session, report: Report, scenarios: Scenario[], diffs: Diff[], runs: Run[], prior?: number) {
   const issueUrl = await siteUrl().then((u) => (u ? `${u}/browse/${session.issueKey}` : undefined));
-  const md = reportMarkdown(session, report, scenarios, diffs, issueUrl);
+  const md = reportMarkdown(session, report, scenarios, diffs, issueUrl, runs);
   const id = (prior && (await updatePrComment(session.repo, prior, md).catch(() => undefined))) || (await postPrComment(session.repo, session.prNumber, md));
   const { state, description } = statusFor(report, diffs);
   await setCommitStatus(session.repo, session.headSha, state, description, issueUrl ?? session.prUrl);
@@ -126,7 +126,7 @@ async function publishGithub(session: Session, report: Report, scenarios: Scenar
  * The first report creates the comments; later reports edit them. The same report is never posted twice.
  * Never throws: each side is audited as ok or failed on its own.
  */
-export async function publishReport(session: Session, report: Report, scenarios: Scenario[], diffs: Diff[]) {
+export async function publishReport(session: Session, report: Report, scenarios: Scenario[], diffs: Diff[], runs: Run[] = []) {
   const hash = reportHash(report, diffs);
   const done = (await kvs.get<{ jira?: boolean; github?: boolean }>(pubKeys.published(session.id, hash))) ?? {};
   const ids = (await kvs.get<{ jira?: string; github?: number }>(pubKeys.comments(session.id))) ?? {};
@@ -137,7 +137,7 @@ export async function publishReport(session: Session, report: Report, scenarios:
   if (!done.jira) {
     try {
       const updating = ids.jira !== undefined;
-      ids.jira = await publishJira(session, report, scenarios, diffs, ids.jira);
+      ids.jira = await publishJira(session, report, scenarios, diffs, runs, ids.jira);
       jiraOut = updating ? "updated" : "posted";
       done.jira = true;
       await audit(session, { action: "jira.comment", target: session.issueKey, reason, result: "ok", inputs: { commentId: ids.jira } });
@@ -157,7 +157,7 @@ export async function publishReport(session: Session, report: Report, scenarios:
   } else if (!done.github) {
     try {
       const updating = ids.github !== undefined;
-      const gh = await publishGithub(session, report, scenarios, diffs, ids.github);
+      const gh = await publishGithub(session, report, scenarios, diffs, runs, ids.github);
       ids.github = gh.id ?? ids.github;
       githubOut = updating ? "updated" : "posted";
       done.github = true;
@@ -231,7 +231,7 @@ export async function fileRegressionBug(session: Session, scenario: Scenario, di
   const runs = ((await kvs.get<Run[]>(keys.runs(session.id))) ?? []).filter((r) => diff.runIds.includes(r.id));
   const headRuns = runs.filter((r) => r.env === "head");
   const projectKey = session.issueKey.split("-")[0];
-  const summary = `Regression from ${session.repo}#${session.prNumber}: ${scenario.objective}`.slice(0, 254);
+  const summary = bugSummary(scenario, headRuns);
   const inputs = { scenarioId: scenario.id, classification: diff.classification, runIds: diff.runIds };
 
   let key: string;

@@ -1,5 +1,6 @@
 import { sessionForIssue } from "../lib/store";
 import * as actions from "../lib/actions";
+import { observedFailure } from "../lib/honest";
 
 // Rovo agent actions. Inputs arrive as top-level payload fields; Rovo also adds payload.context.
 // Each one calls the same lib/actions.ts function as the panel resolver, and returns short JSON
@@ -30,7 +31,10 @@ export async function rovoGetVerification(payload: Payload) {
     status: d.session.status,
     verdict: d.report?.recommendation ?? "no report yet",
     acceptanceCriteria: d.report?.coverage.map((a) => `AC${a.index} ${a.status}: ${a.text}`) ?? d.criteria.map((t, i) => `AC${i + 1} pending: ${t}`),
-    results: d.diffs.map((x) => `${x.scenarioId} (${objective(x.scenarioId)}): base ${x.base}, PR ${x.head} -> ${x.classification}`),
+    results: d.diffs.map((x) => {
+      const seen = x.head === "FAIL" ? observedFailure(d.scenarios.find((s) => s.id === x.scenarioId), d.runs, x.scenarioId) : undefined;
+      return `${x.scenarioId} (goal: ${objective(x.scenarioId)}): base ${x.base}, PR ${x.head} -> ${x.classification}${seen ? `. Observed on PR: ${seen}` : ""}`;
+    }),
     risks: d.report?.risks ?? [],
     sandboxes: `base ${d.sandbox.base}, PR ${d.sandbox.head}; provider ${d.sandbox.knobs.provider} ${d.sandbox.knobs.latencyMs}ms`,
     note: "Not a merge approval. A human decides.",
