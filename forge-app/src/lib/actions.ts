@@ -96,7 +96,8 @@ export async function loadDetail(sessionId: string): Promise<SessionView | null>
     getSandbox(sessionId),
     getIngestSummary(sessionId),
   ]);
-  const raw = { session, findings: context?.findings ?? [], scenarios, runs, diffs, asks, report, audit };
+  // The audit log is stored per issue (the full trail stays in KVS); the panel and Rovo show only this run's writes.
+  const raw = { session, findings: context?.findings ?? [], scenarios, runs, diffs, asks, report, audit: audit.filter((a) => a.sessionId === sessionId) };
   const parsed = SessionDetail.safeParse(raw);
   if (!parsed.success) console.warn(`SessionDetail ${sessionId} off-schema: ${parsed.error.issues[0]?.path.join(".")}`);
   const detail = parsed.success ? parsed.data : (raw as SessionDetail);
