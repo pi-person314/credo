@@ -1,123 +1,102 @@
 # Credo
 
-Merge with confidence. Credo is a Forge app for Jira (Atlassian Agentic Workforce Challenge, Track 1). When a PR opens for a Jira ticket, the agent reads the ticket, its acceptance criteria, linked Confluence specs, the diff, and Greptile's review. It then runs the risky behavior on the old code (**base**) and the new code (**PR**) side by side in Docker sandboxes.
+**Merge with confidence.** Credo is an AI agent that lives inside Jira and proves whether a pull request does what its ticket asks, before anyone merges it.
 
-Everything shows up inside the Jira ticket:
-- a status for each acceptance criterion
-- evidence for every result
-- a **live sandbox** where you watch the agent's browser, click around yourself, flip failure knobs, and ask for new tests in plain English (panel or Rovo chat)
+Built for Cal Hacks, Atlassian Agentic Workforce Challenge, Track 1: *Agents that do the work*.
 
-On a regression it files a linked Bug with repro steps. Workflow changes wait for a human's OK, and every write goes in an audit log.
+## The problem
 
-Full spec: [docs/SPEC.md](docs/SPEC.md) · Setup, secrets and accounts: [docs/SETUP.md](docs/SETUP.md)
+Coding agents open pull requests faster than people can review them. A diff can look harmless and still break the one thing the ticket cared about. Code review reads the change, but nobody runs it against the acceptance criteria. That QA pass, the repro and the bug report are still manual work.
 
-Demo: Jira ticket [PAY-5](https://one-atlas-fdzb.atlassian.net/browse/PAY-5) · bug PR [checkout-demo #1](https://github.com/pi-person314/checkout-demo/pull/1)
+## What Credo does
 
-## Status
+When a PR opens for a Jira ticket, Credo:
 
-| Area | Owner | State |
+1. **Reads the context**: the ticket and its acceptance criteria, the Confluence specs linked from it, the PR diff, and Greptile's review.
+2. **Plans tests** with Factory Droid for the behavior the PR changes, each one tied to an acceptance criterion.
+3. **Runs them on both versions**: two throwaway Docker sandboxes, one on the old code (**base**) and one on the new code (**PR**), with the same data.
+4. **Compares and reports** inside the Jira ticket: a verdict, a status for every acceptance criterion, and evidence for every result.
+5. **Does the follow-up work**: comments on the ticket and the PR, sets a GitHub commit status that blocks the merge on a regression, and files a linked Bug with repro steps when a human says so.
+
+Credo never calls a PR "safe". It shows what it verified, what failed and what it didn't test. Humans still decide.
+
+## Inside the ticket
+
+The **Credo** panel on the Jira issue has:
+
+- **Verdict**: `BLOCKING_REGRESSION`, `NEEDS_REVIEW` or `NO_BLOCKERS_FOUND`, with the failure in plain words, e.g. "PR: 2 charges for the order (expected 1)". **Run again** starts a fresh run on the same PR head.
+- **Acceptance criteria**: each criterion as `VERIFIED`, `FAILED`, `INCONCLUSIVE` or `UNTESTED`, with the tests behind it and the sources Credo read.
+- **Live sandbox**: base and PR running side by side. Watch the agent's browser, ▶ Replay any test, click through both apps yourself or take over the agent's browser, and flip failure knobs (provider `ok`, `slow`, `timeout`, `error`) on both at once.
+- **Tests**: every test with its base and PR result and evidence (HTTP log, DB rows, screenshot, Playwright trace). Any test exports as a Playwright `.spec.ts`.
+- **Ask**: request a new test in plain English ("What if the provider times out and the user retries?"). It runs on both sides and lands in the report.
+- **Activity**: a timeline and an audit log of every write the agent made.
+
+The same agent is in **Rovo chat**: check the verification status, ask for a test, set knobs, or file the regression Bug after you confirm.
+
+**Human in the loop.** Filing a Bug and moving the ticket back to In Progress each need a human click in the panel or a confirmation in Rovo. Every write is audited.
+
+## How it works
+
+```
+GitHub PR ──webhook──► Forge app (Atlassian cloud)
+                        ingest Jira + Confluence + GitHub + Greptile
+                        issue panel · Rovo agent · KVS state · audit log
+                        publish: Jira comment / Bug · GitHub comment + status
+                              │ start, ask, knobs           ▲ events
+                              ▼                             │
+                       Runner (Azure VM, Docker, behind Caddy)
+                        orchestrator · Droid planner · sandbox manager
+                        executor · verifier · live view · evidence
+                        sb-<id>-base  (app + Postgres + fake provider) @ baseSha
+                        sb-<id>-head  (app + Postgres + fake provider) @ headSha
+```
+
+**Forge talks to people and Atlassian; the runner does the heavy work.** Forge functions stay short: every runner call returns at once, and the runner streams events back to a Forge web trigger.
+
+- **Ingest** (Forge queue consumer): finds the Jira key in the PR title or branch, reads the context, stores the session in Forge KVS and starts the runner.
+- **Plan**: Factory Droid gets the ticket, criteria, specs, findings, diff and the app's manifest, and writes JSON scenarios. They are validated against a schema, retried once on error, and fall back to canned scenarios.
+- **Run**: steps are `http`, `parallel`, `ui` (Playwright) and `wait`; checks are `db_count`, `http_status`, `json_path` and `ui_text`. New failures are rerun twice before they count.
+- **Compare**: each test gets a label from its base and PR results.
+
+| base \ PR | PASS | FAIL |
 |---|---|---|
-| Shared contracts (`packages/contracts`) | both | ✅ v0.2: types, scenario format, runner API, events, coverage + verdict rules, 22 tests |
-| `forge-app` (Jira panel, Rovo agent, web triggers, KVS, publish) | A | ✅ P0 deployed to development: ingest (Jira, Confluence, GitHub files, Greptile, manifest), event projection into KVS, report + verdict, Jira/GitHub publish, guarded Bug + transition, issue panel with live view Frame, Rovo actions. Works end to end on PAY-5: panel shows the verdict, Jira report comment, GitHub PR comment and `Credo` status post. Panel shows progress (ask queue states, busy pill), the Sources ingest read, and a notice when sandboxes shut down |
-| `mocks/runner-mock` | A | ✅ fake runner: full canned pipeline + asks, posts events to the Forge web trigger; `replay` CLI posts the sequence directly |
-| `runner` (orchestrator, planner, sandboxes, executor, verifier, live view) | B | ✅ deployed on the Azure VM: full pipeline + Runner API + dev:cli; Droid planner (success criteria need a real success assertion); demo bug NEW_REGRESSION 10/10; live view page with quick actions (pay twice on both), per-side compare, plain-words timeline, voice narration, auto-reconnect and expired states |
+| **PASS** | `UNCHANGED_PASS` | `NEW_REGRESSION` (mixed reruns: `FLAKY`) |
+| **FAIL** | `IMPROVEMENT` | `EXISTING_FAILURE` |
 
-| `demo-app` | B | ✅ lives in [pi-person314/checkout-demo](https://github.com/pi-person314/checkout-demo); bug PR #1 |
-| `infra` (compose: laptop + tunnel or Azure VM + Caddy) | B | ✅ runner image, compose (127.0.0.1:4100), edge Caddyfile, deploy script; the GitHub Actions deploy workflow deploys the runner to the VM and the smoke test passes |
+Errors and timeouts are `INCONCLUSIVE`, never a pass. A confirmed `NEW_REGRESSION` makes the verdict `BLOCKING_REGRESSION`; anything flaky, inconclusive or untested makes it `NEEDS_REVIEW`.
 
-## Changelog
+- **Safety**: sandboxes run on internal networks with CPU and memory caps, no host ports and none of the runner's secrets, and only an allowlist of compose settings from the PR is kept. They shut down after 30 idle minutes.
 
-- **Demo reset** (forge-app): the events web trigger accepts `{"admin":"clear_issue","issueKey":"PAY-5"}` with the runner token. It unlinks the issue from its run, so the panel shows the empty pre-run state, and keeps the session records and audit trail in KVS. The panel now treats a session-less `getSession` reply as "no run yet" instead of "Could not load Credo".
-- **Live sandbox sweep fixes** (runner): from a headless sweep of every control. Take over clicks land on the right spot at the Jira size (the 16:9 screen box letterboxes the 1000x720 frame, which the click mapping now accounts for). The card values wrap, so the charge count is never cut off. Reload and Open ↗ follow the page the preview is on. Applying knobs shows the clamped latency and adds one timeline row, not two, and the knobs label updates immediately. The per-side result line hides once the card shows a newer order. The take-over bar says where typing goes. The verdict doesn't call two different outcomes (paid vs payment_failed) a charge difference. `/favicon.ico` answers 204 instead of a 401 in the console.
-- **Agent's browser shows the work, with Replay** (runner): after each HTTP-only test the agent opens that test's order page on both sides for 1.5 s (was 0.4 s), labelled "result: order N", so the live view shows base and PR results test by test. The agent's browser keeps the last 40 frames of each test per side, and each row in the live view's Tests table has ▶ Replay, which plays them back on both screens (`GET /view/:id/replay/:scenarioId`). Recordings live in memory and are dropped when the session is torn down.
-- **Jira embed width** (forge-app): the Live sandbox tab's Stack fills the panel and the Frame sits in a full-width Box. Hiding the panel's own knobs had let the embed shrink to the width of the row above it (about 310px), which stacked base and PR again.
-- **Honest AC status, counts and safer sandboxes** (contracts, forge-app, runner): a failing scenario now only fails its primary acceptance criterion (its first `jira:<KEY>#acN` ref), so a double-charge regression tagged with AC1 and AC2 no longer marks "Retries after a provider error succeed" FAILED; a criterion whose only evidence is a scenario that failed on another criterion shows INCONCLUSIVE, and the planner prompt says to list the criterion a scenario's checks would break first. The report line and the `Credo` commit status count distinct regressions (grouped by failed check, like the Regressions section), e.g. "1 regression vs base, failing in 3 of 7 scenarios. PR: 4 charges for the order (expected 1)", capped at GitHub's 140 characters. Sandboxes keep only an allowlist of compose service keys (no privileged, cap_add, devices, pid/network_mode host, security_opt, env_file, extends, secrets, deploy), builds must come from inside the repo, top-level volumes and networks lose their drivers and `external`, CPU/memory caps always apply, and `docker compose` runs with a bare environment so a PR's compose file can't interpolate the runner's secrets.
-- **Live sandbox clarity** (runner, forge-app): the base and PR cards and the verdict show the newest order on each side ("Order #3 · paid · 2 charges"), however it was made (Pay twice on both, the per-side buttons, clicking in the app, or Take over), so the cards always match the app panes; `/view/:id/state` returns `latest` per side. Base and PR stay side by side in the 520px Jira frame (stacked only under 420px). "Watch the agent" is now "Agent's browser" and says Idle when the agent isn't testing; Take over opens the app if the agent's browser has nothing on screen yet and is disabled with a reason while the agent tests. Pay and Pay twice fast act on that same newest order. The verdict only compares once you have done something in this view and both sides are paid. Pay twice on both sets its temporary slow provider on the sandboxes directly (and restores whatever knobs are current when it ends), so the timeline ("Timeline", since it lists your actions too) shows one line per side instead of two extra knob changes. The shutdown banner says redeploys stop the sandboxes too. The Jira panel hides its own knobs while the live view (which has them) is embedded.
-- **Voice narration in the live sandbox** (runner): a 🔊 toggle in the live view header (off by default) reads the run aloud with the browser's built-in speech (`speechSynthesis`), so no API key and no server change. One line per test ("Test 2 of 7: Double-clicking Pay shows one paid order."), its verdict with the observed counts ("New regression. Old code made 1 charge, new code made 2 charges."), the session total, and the result of your own quick actions. Lines never overlap; stale progress lines are skipped so speech keeps up, results always play. The spoken line shows as a caption. Events from before you turned it on stay quiet.
-- **Run-scoped audit view** (forge-app): the panel's Activity audit table and Rovo show only the current run's writes, so earlier rehearsals don't appear in a fresh demo. The full per-issue trail is still kept in KVS (`audit:<issueKey>`).
-- **Demo fixes** (forge-app + runner): Tests-tab evidence links no longer repeat the session id (they 404ed); "Bug filed" and "Moved to In Progress" only count this run, so an earlier rehearsal doesn't lock them (same for the server's File Bug guard); filed Bugs go to the ticket's assignee (unassigned if Jira refuses); Rovo's get-verification says which commit was checked; Activity says when Factory Droid wrote the scenarios, or which fallback was used.
-- **Panel and report polish** (forge-app + runner): failed checks read in plain words ("PR: 5 charges for the order (expected 1)", no `$order.id` placeholders) in the panel, Jira/GitHub reports, Bug and Rovo; regressions failing the same check share one row ("Seen in N scenarios"); the vague-ask refusal shows under the ask box and the box no longer drops fast keystrokes; "Pay twice on both" puts the knobs back afterwards.
-- **Honest success criteria** (runner): a criterion like "Retries after a provider error succeed" now only counts as covered by a scenario that proves the success (retry 200, order `paid`, exactly 1 charge), not one that only shows the failure. The planner prompt teaches the recovery path, scenarios may switch the provider mid-run with `POST /__test/provider` (the only hook allowed), the validator drops a false AC claim (a success check must come after the provider recovers, and a recovery criterion needs the provider to actually fail) and asks Droid to fix it once unless the 5 min first-report budget is nearly spent, the happy path `sc_single_pay` no longer claims AC2, and the canned fallback and error ask template gain the AC2 recovery scenario `sc_error_then_retry_succeeds`.
-- **Live sandbox UX** (runner, forge-app embed): the live view opens on one obvious action, "Pay twice on both" (provider slow 800 ms, fresh order, two overlapping pays per side), and shows order status and charges for base and PR side by side, red when they differ. Each side also has New order / Pay / Pay twice fast (`POST /view/:id/action`). Try it yourself loads both app previews with loading, error and auto-retry; Watch the agent shows a live/reconnecting status per side and reconnects with backoff. Knobs and reset show pending / applied / error and the current value. A plain-words timeline says what the agent is doing. Expired link, sandboxes shut down after idle, and runner unreachable each get a clear banner. Fits the 520px Jira Frame with one scrollbar, light and dark, visible keyboard focus. The Jira embed retries until the view URL exists.
-- **Honest results** (forge-app): vague test requests ("?", "test", under 12 characters or fewer than 3 words) are refused with a prompt to describe the situation, in the panel (red notice) and in Rovo. Regressions now lead with what the PR run observed, e.g. "PR: 2 rows in charges where orderId=$order.id (expected 1)", with the scenario goal as secondary text, in the panel, the Jira report, the GitHub comment, Rovo's get-verification and filed Bugs (summary "Regression: <observed failure> (<scenario id>)"). The Rovo prompt asks for a concrete scenario on vague requests and quotes observed failures. Observed text is flattened to one line, so a UI failure with line breaks can still be filed as a Bug. forge-app gets `npm test` (vitest), run in CI.
-- **Visible progress and sources** (forge-app): the panel paints "Loading Credo…" right away, shows a Retry button if the first load fails, and on later poll errors keeps the last data with a "Reconnecting…" note while it backs off (2 s doubling to 60 s). Each ask in the Tests tab shows its state: Queued (N ahead), Planning…, Running on old and new code…, Done: <classification> or Failed: <reason>, and the header shows a pill while the runner is busy (e.g. "Busy: planning ask · 1 queued"). A Sources block on the Acceptance criteria tab lists what ingest read (Jira issue + N acceptance criteria, Confluence page titles or "none linked" / the failure, PR file count, Greptile findings), stored in `ingest:<id>` so it never scrolls out of the event window; ingest logs one line of counts per run. After a teardown (idle, runner restart or delete) the Live sandbox tab shows the runner's reason (or that the runner no longer has the session) and says to push a commit for a fresh run, instead of dead controls; an ask that was planning, running or queued at that point shows "Not run" and the busy pill clears. `npm test` in forge-app (vitest) runs its unit tests.
-- **Renamed to Credo** (forge-app, runner, docs): the product was "PR Confidence". Display names only: Jira panel title, Rovo agent name and prompt, report headings, the GitHub commit status (now `Credo`), the regression Bug label (now `credo`) and the live view title. Repo, package, service, env var and Forge module keys keep their `pr-agent` / `pr-confidence` names so deploys and installs don't change.
-- **First full run on the real demo** (forge-app, runner, infra): checkout-demo PR #1 → GitHub webhook → Forge ingest reads PAY-5, the Confluence page "Payments retry spec" and Greptile's review → the runner on the Azure VM (pr-agent-saksham-20261024.westus2.cloudapp.azure.com) runs base vs PR → the PAY-5 panel shows "Blocking regression" → Jira report comment, GitHub PR comment and a red `PR Confidence` commit status. Greptile is installed on checkout-demo and posted a P1 "Overlapping retries charge twice" review on PR #1, which ingest picks up. The Factory Droid planner wrote the scenarios (ids like `sc_concurrent_payment_is_idempotent`, not in the canned fallback): route TARGETED_TEST, 5 scenarios, 1 NEW_REGRESSION, 3 UNCHANGED_PASS, 1 INCONCLUSIVE. The report's counts and "what was not tested" wording are fixed, and a failed panel action now shows a red error instead of a green success notice. Greptile comments are read as plain text (badges, links and the diagram dropped) and ranked by their P0-P3 badge, so its P1 finding counts as high; a regression planned from a Greptile finding says "Greptile flagged this too."
-- **Publish fixes** (forge-app): Jira rejected the report comment (400 INVALID_INPUT) because ADF documents put `version` under `attrs`; it now sits at the top of the doc, which also fixes filed Bug descriptions. Jira and GitHub errors now carry the API's response text, in the panel's Activity tab and in `forge logs`. Found on the first real run (checkout-demo PR #1 → PAY-5).
-- **Demo ticket is PAY-5** (demo data): the ticket lives on the demo site one-atlas-fdzb as PAY-5 (Jira numbers new projects from 1), with the reworded AC3 and a link to the Confluence page "Payments retry spec" (space PAY). The fixture, canned scenarios, docs and tests now say PAY-5, and the bug PR's title starts with `PAY-5:`.
-- **Forge P0** (forge-app, mocks): ingest builds the Context from the PR, Jira issue + acceptance criteria, linked Confluence pages, Greptile comments and the repo manifest, then starts the runner. Runner events are projected into KVS (scenarios, runs, diffs, asks, sandbox state); `session.complete` / `ask.complete` build the report and publish it as a Jira comment, a GitHub PR comment and the `Credo` commit status (edited in place, never posted twice). A blocking regression proposes moving the issue back to In Progress; the move and any regression Bug need a human click (panel) or confirmation (Rovo). The issue panel shows verdict, criteria, sandbox knobs + embedded live view, tests with evidence, asks, activity and audit. Manifest adds the `live-view` resource, the runner host under `external.frames` and `read:page:confluence`. `runner-mock replay` posts the canned sequence to the web trigger.
-- **AC3 reworded** (demo data): PAY-12's third acceptance criterion now matches checkout-demo: "A provider timeout marks the order payment_failed and creates no charge" (was "leaves the order pending", which failed on base and PR alike). Same change in the fixture, its Confluence excerpt, and docs/SETUP.md; the Jira ticket is edited by hand.
-- **GITHUB_TOKEN without VM access** (infra): the deploy workflow copies the repo secret `VM_GITHUB_TOKEN` into the VM's `.env` (over stdin) and recreates the runner when it changed.
-- **VM smoke test** (infra): `infra/smoke.sh` runs the demo session (checkout-demo PR #1) on the VM against the local runner and prints its events and diffs; the RUNNER_TOKEN never leaves the VM. From GitHub: Actions → deploy → Run workflow with `smoke` (add `probe_only` to skip the redeploy, `keep` to leave the sandboxes up for the live view).
-- **First Forge deploy** (forge-app): app registered (`app.id` in the manifest), deployed to development and installed on the demo Jira + Confluence site. Fixes needed to get there: panel icon, real runner host in `external.fetch`, emit on for Forge's bundler, contracts copy drops `.js` from relative imports. Web triggers now refuse every request while `RUNNER_TOKEN` / `GITHUB_WEBHOOK_SECRET` are unset, and a bad event body returns 400 instead of crashing.
-- **Take over the agent's browser** (runner, P1): in the live view, tick "Take over" and click, double-click, scroll or type on either screen (or both at once); `POST /view/:id/input?t=`. Refused while the agent is running a test.
-- **Export as .spec.ts** (runner, P1): any scenario as a standalone Playwright test (`GET /sessions/:id/scenarios/:scenarioId/spec` with x-token, or the `.spec.ts` link in the live view). Exported specs pass on base and fail on the PR for the race scenarios.
-- **Infra** (runner image + VM): image on Playwright 1.63 with Docker CLI/Compose, git and the Droid CLI; compose runs only the runner on `127.0.0.1:4100` in attach mode (joins each sandbox's internal network); `infra/edge/Caddyfile` for the VM's edge Caddy; `infra/deploy.sh` ships `git HEAD` over SSH and restarts the runner; CI builds the image.
-- **Live view** (runner): `/view/:id?t=` page for the Jira panel: Watch the agent (CDP screencast over `WS /live/:id/:env`) or Try it yourself (both apps through `/preview/:id/:env/<token>/`), knobs + reset for both, live charge/order counts, test table, activity feed. `/artifacts/:id/*?t=` serves evidence. `GET /sessions/:id/view-url` (x-token) returns a signed URL for Forge's `getViewUrl`.
-- **Orchestrator + Runner API + CLI** (runner): `POST /sessions` runs sandboxes → route → plan → run both → verify → follow-ups → `session.complete` in the background; asks queue behind it (and rebuild sandboxes after idle teardown); knobs/reset hit both; status; teardown; idle sweeper; orphan cleanup on start. Events go to the Forge web trigger in order with retries. `dev:cli` runs it all locally; `--scenarios … --repeat 10` is the 10/10 check (base 1 charge, PR 5, every time). `mocks/fixtures/context.json` now points at checkout-demo PR #1.
-- **Droid planner** (runner): prompts Factory Droid (`droid exec`, read-only) with the ticket, acceptance criteria, Confluence, findings, diff and manifest; validates the JSON against the Scenario schema and the manifest, retries once with the errors, falls back to canned scenarios (pipeline) or keyword templates (asks). Follow-ups: one round, up to 3, only after a surprise. Docs-only PRs route to STATIC_ONLY.
-- **Executor + verifier** (runner): runs scenario steps (`http`, `parallel`, `ui` via Playwright, `wait`) with `$name.path` references, checks `db_count` / `http_status` / `json_path` / `ui_text`, saves evidence (HTTP log, DB rows, screenshot, Playwright trace), streams the agent's browser as JPEG frames, reruns PR failures twice and labels each diff. Docker test: the 3 fixture scenarios give UNCHANGED_PASS, NEW_REGRESSION, NEW_REGRESSION on checkout-demo PR #1.
-- **Sandbox manager** (runner): checks out base and head at their SHAs, turns the demo repo's compose file into an isolated `sb-<session>-<env>` stack (no host ports, internal network, CPU/mem caps), waits for health, seeds, sets knobs, reads DB rows, tears down after idle TTL. Docker test proves base 1 charge vs PR 5.
-- **Signed session token** (contracts): `signSessionToken` / `verifySessionToken` in `@pr-agent/contracts/token` for the runner's `?t=` links. Forge's `getViewUrl` signs with `RUNNER_TOKEN`.
-- **Setup guide**: docs/SETUP.md (every env var, account and login), compose profiles to run the runner on a laptop through a Cloudflare tunnel or on a VM.
-- **Scaffold + contracts (Forge)**: pnpm workspace, shared zod contracts with tests, Forge app skeleton (web triggers, queue consumer, issue panel, Rovo agent + actions), contracts sync into the Forge app, runner stub, runner mock, compose + Caddy draft, CI.
+## The demo
 
-## Layout
+Jira ticket [PAY-5](https://one-atlas-fdzb.atlassian.net/browse/PAY-5) says payment retries must never charge twice. An agent opens [checkout-demo PR #1](https://github.com/pi-person314/checkout-demo/pull/1) to "simplify payment retries", which quietly removes the payment lock. Credo runs both versions: base makes 1 charge, the PR makes 2 or more. AC1 fails, the verdict is a blocking regression, the PR's `Credo` status turns red, and one click files the Bug. The race reproduces 10 times out of 10.
+
+## Repo
 
 ```
-packages/contracts/   shared types and rules (both, change by PR only)
-forge-app/            A   Forge app: manifest.yml, web triggers, queue consumer, panel, Rovo actions (npm, not in the pnpm workspace)
-  src/contracts/          generated copy of packages/contracts (pnpm sync:contracts)
-mocks/runner-mock/    A   fake runner for building the Forge app alone
-runner/               B   orchestrator, planner, sandbox manager, executor, verifier, live view page
-demo-app/             B   checkout app with the double-charge bug
-infra/                B   compose.yml, Caddyfile, azure-vm.sh
-mocks/fixtures/       B   context.json, scenarios.json
-scripts/              sync-contracts.mjs
-docs/SPEC.md          final spec
+packages/contracts/  shared types, scenario schema, runner API, events, verdict rules (TypeScript + zod)
+forge-app/           Forge app: manifest, web triggers, queue consumers, issue panel, Rovo agent and actions
+runner/              orchestrator, Droid planner, sandbox manager, executor, verifier, live view
+infra/               runner image, compose, edge Caddy, deploy script
+mocks/               fake runner and fixtures for building each half on its own
+demo-app/            manifest of the checkout app (the app lives in pi-person314/checkout-demo)
 ```
+
+Stack: Atlassian Forge (UI Kit, Rovo, KVS, queues, web triggers), Jira and Confluence REST, GitHub, Greptile, Factory Droid, Docker, Playwright, Node 22, TypeScript, zod, Azure.
 
 ## Run it
 
-Needs Node 22 or 24 and pnpm 10 (`corepack enable`).
+Needs Node 22 and pnpm 10 (`corepack enable`).
 
 ```bash
 pnpm install
 pnpm typecheck && pnpm test && pnpm check:contracts
+
+# the runner pipeline locally, without Forge
+pnpm --filter @pr-agent/runner dev:cli --context ../mocks/fixtures/context.json
+
+# the Forge app
+cd forge-app && npm install && forge deploy && forge install --product jira
 ```
 
-**Person A: Forge app**
-
-```bash
-npm i -g @forge/cli@latest && forge login     # API token with Forge scopes
-forge site provision                          # demo site
-cd forge-app && npm install
-forge register                                # once; fills app.id in manifest.yml
-forge variables set --encrypt RUNNER_TOKEN change-me
-forge variables set RUNNER_URL https://<runner-host>
-forge variables set --encrypt GITHUB_TOKEN <pat>
-forge variables set --encrypt GITHUB_WEBHOOK_SECRET <secret>
-forge deploy && forge install --demo-site --product jira
-forge webtrigger                              # copy the runner-events URL
-forge tunnel                                  # live reload while building
-
-# in another terminal, the fake runner:
-EVENTS_URL=<runner-events url> pnpm dev:runner-mock
-```
-
-After changing `packages/contracts`, run `pnpm sync:contracts` and commit `forge-app/src/contracts`.
-
-**Person B: runner**
-
-```bash
-pnpm --filter @pr-agent/runner dev:cli --context ../mocks/fixtures/context.json   # pipeline without Forge
-pnpm dev:runner                                                                  # API on :4100
-```
-
-Full runner with Docker: `cp .env.example .env`, fill it in, then `docker compose -f infra/compose.yml --profile tunnel up --build` on a laptop. On the Azure VM: `VM_KEY=<key> infra/deploy.sh` (runner on 127.0.0.1:4100 behind the edge Caddy). See [docs/SETUP.md](docs/SETUP.md).
-
-Docker tests (real sandboxes, checkout-demo main vs PR #1): `DOCKER_TESTS=1 pnpm --filter @pr-agent/runner test`. The 10/10 check: `pnpm --filter @pr-agent/runner dev:cli --scenarios ../mocks/fixtures/scenarios.json --repeat 10`.
-
-## How we work
-
-See [CONTRIBUTING.md](CONTRIBUTING.md). Short version: stay in your folders, change contracts only by PR, merge to `main` at least every 6 hours, and update this README on every merge.
+Accounts, secrets, the Azure VM and the GitHub webhook are in [docs/SETUP.md](docs/SETUP.md). The full design is in [docs/SPEC.md](docs/SPEC.md).
