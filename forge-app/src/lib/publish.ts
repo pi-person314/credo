@@ -26,7 +26,7 @@ async function jira<T>(method: string, path: Route, body?: unknown): Promise<T> 
     headers: { accept: "application/json", "content-type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`jira ${method} ${path.value} -> ${res.status}`);
+  if (!res.ok) throw new Error(`jira ${method} ${path.value} -> ${res.status} ${(await res.text().catch(() => "")).slice(0, 300)}`);
   const raw = await res.text(); // 201/204 on links and transitions have no body
   return (raw ? JSON.parse(raw) : undefined) as T;
 }
@@ -144,6 +144,7 @@ export async function publishReport(session: Session, report: Report, scenarios:
       await emit(session, "reporter", "publish.jira", true, `Report posted to ${session.issueKey}`);
     } catch (e) {
       jiraOut = "failed";
+      console.warn(`publish ${session.id}: Jira comment failed: ${errText(e)}`);
       await audit(session, { action: "jira.comment", target: session.issueKey, reason: `${reason} (${errText(e)})`, result: "failed" });
       await emit(session, "reporter", "publish.jira", false, `Jira comment failed: ${errText(e)}`);
     }
@@ -165,6 +166,7 @@ export async function publishReport(session: Session, report: Report, scenarios:
       await emit(session, "reporter", "publish.github", true, `PR comment and status (${gh.state}) posted`);
     } catch (e) {
       githubOut = "failed";
+      console.warn(`publish ${session.id}: GitHub publish failed: ${errText(e)}`);
       await audit(session, { action: "github.comment", target: prTarget, reason: `${reason} (${errText(e)})`, result: "failed" });
       await emit(session, "reporter", "publish.github", false, `GitHub publish failed: ${errText(e)}`);
     }
