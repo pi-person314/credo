@@ -176,8 +176,8 @@ export async function fileBug(sessionId: string, scenarioId: string, approvedBy:
     const diff = diffs.find((d) => d.scenarioId === scenarioId);
     if (!scenario || !diff) return fail(`no result for scenario ${scenarioId}`);
     if (diff.head !== "FAIL") return fail(`${scenarioId} does not fail on the PR (${diff.classification})`);
-    // Double click / repeated Rovo confirm: return the Bug already filed.
-    const prior = audit.find((a) => a.action === "jira.bug" && a.result === "ok" && (a.inputs as { scenarioId?: string })?.scenarioId === scenarioId);
+    // Double click / repeated Rovo confirm in this run: return the Bug already filed. Earlier runs don't count.
+    const prior = audit.find((a) => a.sessionId === session.id && a.action === "jira.bug" && a.result === "ok" && (a.inputs as { scenarioId?: string })?.scenarioId === scenarioId);
     if (prior) return { ok: true, key: prior.target };
     if (!bugHook) return fail("Bug filing is not wired yet");
 

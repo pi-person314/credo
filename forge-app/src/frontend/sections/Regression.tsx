@@ -10,10 +10,11 @@ type Props = {
   onMoveBack: () => Promise<boolean>;
 };
 
+// The audit log is per issue and spans runs; only this run's writes count, so an earlier rehearsal doesn't lock the buttons.
 const filedFor = (d: SessionDetail, scenarioId: string) =>
-  d.audit.some((a) => a.action === "jira.bug" && a.result === "ok" && JSON.stringify(a.inputs ?? "").includes(scenarioId));
+  d.audit.some((a) => a.sessionId === d.session.id && a.action === "jira.bug" && a.result === "ok" && JSON.stringify(a.inputs ?? "").includes(scenarioId));
 
-const movedBack = (d: SessionDetail) => d.audit.some((a) => a.action === "jira.transition" && a.result === "ok");
+const movedBack = (d: SessionDetail) => d.audit.some((a) => a.sessionId === d.session.id && a.action === "jira.transition" && a.result === "ok");
 
 // Only shown when the report has a regression. Each click is the human approval for that write.
 export const Regression = ({ detail, onFileBug, onMoveBack }: Props) => {

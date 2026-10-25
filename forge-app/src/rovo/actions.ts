@@ -28,6 +28,7 @@ export async function rovoGetVerification(payload: Payload) {
   return {
     issueKey: s.issueKey,
     pr: d.session.prUrl ?? `#${d.session.prNumber}`,
+    commit: `PR ${d.session.headSha.slice(0, 7)} compared with base ${d.session.baseSha.slice(0, 7)}`,
     status: d.session.status,
     verdict: d.report?.recommendation ?? "no report yet",
     acceptanceCriteria: d.report?.coverage.map((a) => `AC${a.index} ${a.status}: ${a.text}`) ?? d.criteria.map((t, i) => `AC${i + 1} pending: ${t}`),
