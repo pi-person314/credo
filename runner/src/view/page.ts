@@ -200,7 +200,7 @@ a { color: var(--accent); }
   </div>
 
   <div class="compare" id="compare" aria-live="polite">
-    ${SIDES.map((s) => `<div class="score" id="score-${s.env}"><div class="lbl">${s.name} · ${s.sub}</div><div class="val" id="score-val-${s.env}">No order yet</div><div class="sub" id="score-sub-${s.env}">Latest order on this side</div></div>`).join("\n    ")}
+    ${SIDES.map((s) => `<div class="score" id="score-${s.env}"><div class="lbl">${s.name} · ${s.sub}</div><div class="val" id="score-val-${s.env}">No order yet</div><div class="sub" id="score-sub-${s.env}">&nbsp;</div></div>`).join("\n    ")}
     <div class="verdict" id="verdict">Run an action to compare</div>
   </div>
 
@@ -599,7 +599,7 @@ function paint() {
     const c = (s && s.counts && s.counts[env]) || {};
     $("score-val-" + env).textContent = pending[env] ? "Working…" : !healthy(env) ? sbWords(env) : !o ? "No order yet" : "Order #" + o.orderId + " · " + (o.status || "?") + " · " + plural(o.charges, "charge");
     $("score-val-" + env).title = o ? "The newest order on " + NAME[env] + ", however it was made" : "";
-    $("score-sub-" + env).textContent = (o ? "Latest order · " : "") + "All orders " + (c.orders == null ? "–" : c.orders) + " · all charges " + (c.charges == null ? "–" : c.charges);
+    $("score-sub-" + env).textContent = o && c.orders != null ? "Newest of " + plural(c.orders, "order") + " on this side" : "Pay twice on both, or click in the app below";
     $("res-" + env).textContent = pending[env] ? "Working…" : r ? summary(r) : "";
     $("res-" + env).title = r ? summary(r) : "";
     $("act-" + env).hidden = !(s && s.quickActions) || !!gone;
