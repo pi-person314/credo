@@ -63,9 +63,12 @@ describe("coverage", () => {
       d("sc_single_pay", "UNCHANGED_PASS"),
       d("sc_concurrent_retry", "NEW_REGRESSION"),
       d("sc_double_click_pay", "UNCHANGED_PASS"),
+      d("sc_error_then_retry_succeeds", "UNCHANGED_PASS"),
     ]);
     expect(out.map((a) => a.status)).toEqual(["FAILED", "VERIFIED", "UNTESTED"]);
-    expect(out[0]!.scenarioIds).toEqual(["sc_concurrent_retry", "sc_double_click_pay"]);
+    expect(out[0]!.scenarioIds).toEqual(["sc_single_pay", "sc_concurrent_retry", "sc_double_click_pay"]);
+    // The happy path no longer claims AC2: only the recovery scenario (error -> ok -> retry -> paid) verifies it.
+    expect(out[1]!.scenarioIds).toEqual(["sc_error_then_retry_succeeds"]);
   });
 });
 
