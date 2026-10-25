@@ -1,14 +1,14 @@
 import { registerBugHook, registerTransitionHook } from "./actions";
 import { approveTransition, fileRegressionBug, proposeTransition, publishReport } from "./publish";
 import { registerPublishHook } from "./report";
-import { getDiffs, getScenarios, saveReport } from "./store";
+import { getDiffs, getRuns, getScenarios, saveReport } from "./store";
 
 // Plugs the publish module into the state core. index.ts imports this once, so every
 // Forge function (web triggers, resolvers, Rovo actions) runs with the hooks registered.
 
 registerPublishHook(async ({ session, report }) => {
-  const [scenarios, diffs] = await Promise.all([getScenarios(session.id), getDiffs(session.id)]);
-  const out = await publishReport(session, report, scenarios, diffs);
+  const [scenarios, diffs, runs] = await Promise.all([getScenarios(session.id), getDiffs(session.id), getRuns(session.id)]);
+  const out = await publishReport(session, report, scenarios, diffs, runs);
   if (out.jira !== "failed" || out.github !== "failed") await saveReport({ ...report, publishedAt: out.publishedAt });
   console.log(`publish ${session.id} ${out.hash}: jira=${out.jira} github=${out.github}`);
   // A blocking regression gets a proposal only. The move itself waits for a human click.

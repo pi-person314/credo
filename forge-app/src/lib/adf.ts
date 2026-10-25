@@ -1,4 +1,5 @@
 import type { Assertion, Diff, DiffClass, Recommendation, Report, Run, Scenario, Session, Step } from "../contracts/index";
+import { failureText, observedFailure } from "./honest";
 
 // Atlassian Document Format builders for Jira comments and Bug descriptions.
 // Wording rule: say what was checked and what was not. Never call a PR safe.
@@ -105,8 +106,15 @@ const objective = (scenarios: Scenario[], id: string) => scenarios.find((s) => s
 export const greptileNote = (scenarios: Scenario[], id: string) =>
   scenarios.find((s) => s.id === id)?.sourceRefs.some((r) => r.startsWith("greptile:")) ? " Greptile flagged this too." : "";
 
-/** Jira comment body for a report. */
-export function reportAdf(session: Session, report: Report, scenarios: Scenario[], diffs: Diff[]): Node {
+/** Regression line: what the PR run observed first, then the scenario goal. Shared by the Jira and GitHub reports. */
+export function regressionText(scenarios: Scenario[], runs: Run[], id: string) {
+  const seen = observedFailure(scenarios.find((s) => s.id === id), runs, id);
+  const lead = seen ? `PR: ${seen}. Goal: ${objective(scenarios, id)}.` : `${objective(scenarios, id)}.`;
+  return `${lead} Passes on base, fails on PR (confirmed on rerun).${greptileNote(scenarios, id)}`;
+}
+
+/** Jira comment body for a report. `runs` lets regressions say what broke. */
+export function reportAdf(session: Session, report: Report, scenarios: Scenario[], diffs: Diff[], runs: Run[] = []): Node {
   const regressions = diffs.filter((d) => d.classification === "NEW_REGRESSION");
   const unclear = diffs.filter((d) => d.classification === "FLAKY" || d.classification === "INCONCLUSIVE" || d.classification === "EXISTING_FAILURE");
   const pr = session.prUrl ? link(`${session.repo}#${session.prNumber}`, session.prUrl) : text(`${session.repo}#${session.prNumber}`);
@@ -126,7 +134,7 @@ export function reportAdf(session: Session, report: Report, scenarios: Scenario[
       : para(text("No acceptance criteria found on the issue.")),
     heading(4, "Regressions"),
     regressions.length
-      ? bullets(regressions.map((d) => [code(d.scenarioId), text(` ${objective(scenarios, d.scenarioId)}: passes on base, fails on PR (confirmed on rerun).${greptileNote(scenarios, d.scenarioId)}`)]))
+      ? bullets(regressions.map((d) => [code(d.scenarioId), text(` ${regressionText(scenarios, runs, d.scenarioId)}`)]))
       : para(text("None found in the scenarios that ran.")),
     ...(unclear.length
       ? [heading(4, "Needs a look"), bullets(unclear.map((d) => [code(d.scenarioId), text(` ${objective(scenarios, d.scenarioId)}: ${d.classification} (base ${d.base}, PR ${d.head}).`)]))]
@@ -143,9 +151,12 @@ export type Evidence = { label: string; url: string };
 export function bugAdf(session: Session, scenario: Scenario, diff: Diff, headRuns: Run[], evidence: Evidence[]): Node {
   const failed = headRuns.flatMap((r) => r.assertions.filter((a) => a.result === "FAIL"));
   const knobs = scenario.knobs ? ` Provider mode ${scenario.knobs.provider}, latency ${scenario.knobs.latencyMs} ms.` : "";
+  const observed = observedFailure(scenario, headRuns);
+  const assertion = (id: string) => scenario.assertions.find((a) => a.id === id);
   return doc(
+    panel("error", para(strong("What broke: "), text(observed ? `on the PR, ${observed}.` : `the PR run ended ${diff.head}; no failed check was recorded.`))),
     para(text(`Found by Credo while checking ${session.issueKey}. `), session.prUrl ? link(`${session.repo}#${session.prNumber}`, session.prUrl) : text(`${session.repo}#${session.prNumber}`)),
-    para(text(`Scenario `), code(scenario.id), text(`: ${scenario.objective}. Base `), code(short(session.baseSha)), text(` ${diff.base}, PR `), code(short(session.headSha)), text(` ${diff.head}.`)),
+    para(text(`Scenario `), code(scenario.id), text(` (goal: ${scenario.objective}). Base `), code(short(session.baseSha)), text(` ${diff.base}, PR `), code(short(session.headSha)), text(` ${diff.head}.`)),
     heading(4, "Steps to reproduce"),
     para(text(`Start from fixture ${scenario.fixture}.${knobs}`)),
     ordered(scenario.steps.map((s) => [text(describeStep(s))])),
@@ -153,7 +164,7 @@ export function bugAdf(session: Session, scenario: Scenario, diff: Diff, headRun
     bullets(scenario.assertions.map((a) => [text(describeAssertion(a))])),
     heading(4, "Actual on the PR"),
     failed.length
-      ? bullets(failed.map((a) => [code(a.id), text(` expected ${json(a.expected)}, got ${json(a.actual)}${a.note ? ` (${a.note})` : ""}`)]))
+      ? bullets(failed.map((a) => [code(a.id), text(` ${failureText(a, assertion(a.id))}${a.note && a.actual !== undefined ? ` (${a.note})` : ""}`)]))
       : para(text(`Run result ${diff.head}.`)),
     heading(4, "Evidence"),
     evidence.length ? bullets(evidence.map((e) => [link(e.label, e.url)])) : para(text("No artifacts were recorded.")),

@@ -8,7 +8,8 @@
     "typecheck": "tsc --noEmit",
     "deploy": "forge deploy",
     "tunnel": "forge tunnel",
-    "lint": "forge lint"
+    "lint": "forge lint",
+    "test": "vitest run"
   },
   "dependencies": {
     "@forge/api": "^8.3.0",
@@ -23,6 +24,7 @@
   "devDependencies": {
     "@types/node": "22.10.2",
     "@types/react": "18.3.12",
-    "typescript": "5.6.3"
+    "typescript": "5.6.3",
+    "vitest": "2.1.8"
   }
 }
