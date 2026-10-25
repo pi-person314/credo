@@ -24,7 +24,7 @@ Edit only your own folders. If you need something from the other side, ask or op
 - Branch names: `a/<thing>` or `b/<thing>` (for example `a/workspace-ui`, `b/sandbox`). Contract changes: `contracts/<thing>`.
 - Open a PR into `main`. CI must pass.
 - Merge at least every 6 hours to keep merges small.
-- **Every merge to `main` updates `README.md`**: the status table and a changelog line.
+- `README.md` is final. Don't add status or changelog entries to it; the PR description is the record.
 
 ## Dependencies
 
