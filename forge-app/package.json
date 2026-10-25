@@ -2,7 +2,7 @@
   "name": "pr-confidence-forge",
   "version": "0.1.0",
   "private": true,
-  "description": "PR Confidence: a Jira Forge app that verifies PRs against their ticket in live base-vs-PR sandboxes.",
+  "description": "Credo: a Jira Forge app that verifies PRs against their ticket in live base-vs-PR sandboxes.",
   "main": "src/index.ts",
   "scripts": {
     "typecheck": "tsc --noEmit",

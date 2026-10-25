@@ -81,7 +81,7 @@ export function reportMarkdown(session: Session, report: Report, scenarios: Scen
   const rows = report.coverage.map((c) => `| AC${c.index} | ${c.text.replace(/\|/g, "\\|")} | **${c.status}** | ${c.scenarioIds.join(", ") || "none"} |`);
   return [
     `<!-- pr-confidence:session=${session.id} -->`,
-    `### PR Confidence: ${VERDICT_LABEL[report.recommendation]}`,
+    `### Credo: ${VERDICT_LABEL[report.recommendation]}`,
     `Checked \`${session.headSha.slice(0, 7)}\` against base \`${session.baseSha.slice(0, 7)}\` for ${issue}.`,
     diffSummary(report, diffs),
     "",
@@ -122,7 +122,7 @@ async function publishGithub(session: Session, report: Report, scenarios: Scenar
 }
 
 /**
- * Post the report: Jira comment, GitHub PR comment, and the "PR Confidence" commit status on headSha.
+ * Post the report: Jira comment, GitHub PR comment, and the "Credo" commit status on headSha.
  * The first report creates the comments; later reports edit them. The same report is never posted twice.
  * Never throws: each side is audited as ok or failed on its own.
  */
@@ -238,7 +238,7 @@ export async function fileRegressionBug(session: Session, scenario: Scenario, di
   try {
     const type = await bugType(projectKey);
     const description = bugAdf(session, scenario, diff, headRuns, evidenceFor(session, runs));
-    const fields = { project: { key: projectKey }, issuetype: { id: type.id }, summary, description, labels: ["pr-confidence"] };
+    const fields = { project: { key: projectKey }, issuetype: { id: type.id }, summary, description, labels: ["credo"] };
     key = (await jira<{ key: string }>("POST", route`/rest/api/3/issue`, { fields })).key;
   } catch (e) {
     await audit(session, { action: "jira.bug", target: session.issueKey, approvedBy: actor, inputs, reason: `create failed: ${errText(e)}`, result: "failed" });

@@ -22,7 +22,7 @@ import { Regression } from "./sections/Regression";
 import { Sandbox } from "./sections/Sandbox";
 import { Tests } from "./sections/Tests";
 
-// The PR Confidence issue panel. Layout from docs/SPEC.md section 6.
+// The Credo issue panel. Layout from docs/SPEC.md section 6.
 // UI Kit only: no <div>, no third-party React components.
 type Notice = { kind: "success" | "error"; text: string } | null;
 
@@ -32,7 +32,7 @@ const App = () => {
   const [resetting, setResetting] = useState(false);
 
   if (detail === undefined)
-    return error ? <SectionMessage appearance="error" title="Could not load PR Confidence"><Text>{error}</Text></SectionMessage> : <Spinner />;
+    return error ? <SectionMessage appearance="error" title="Could not load Credo"><Text>{error}</Text></SectionMessage> : <Spinner />;
   if (detail === null)
     return <EmptyState header="No PR yet" description="Open a PR with this issue key in its title or branch." />;
 
