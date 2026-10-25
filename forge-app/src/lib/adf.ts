@@ -1,4 +1,4 @@
-import type { Assertion, Diff, Recommendation, Report, Run, Scenario, Session, Step } from "../contracts/index";
+import type { Assertion, Diff, DiffClass, Recommendation, Report, Run, Scenario, Session, Step } from "../contracts/index";
 
 // Atlassian Document Format builders for Jira comments and Bug descriptions.
 // Wording rule: say what was checked and what was not. Never call a PR safe.
@@ -68,16 +68,42 @@ export function describeAssertion(a: Assertion): string {
   }
 }
 
+// Counts line, one entry per base-vs-PR classification, so it matches the scenario list a reader sees.
+const CLASS_LABEL: [DiffClass, string, string][] = [
+  ["NEW_REGRESSION", "regression", "regressions"],
+  ["EXISTING_FAILURE", "failing on base and PR", "failing on base and PR"],
+  ["FLAKY", "flaky", "flaky"],
+  ["INCONCLUSIVE", "inconclusive", "inconclusive"],
+  ["IMPROVEMENT", "fixed by PR", "fixed by PR"],
+  ["UNCHANGED_PASS", "unchanged pass", "unchanged pass"],
+];
+
+/** e.g. "5 scenarios (base vs PR): 1 regression, 1 inconclusive, 3 unchanged pass." */
+export function diffSummary(report: Pick<Report, "notRun">, diffs: Diff[]): string {
+  const parts = CLASS_LABEL.flatMap(([cls, one, many]) => {
+    const n = diffs.filter((d) => d.classification === cls).length;
+    return n ? [`${n} ${n === 1 ? one : many}`] : [];
+  });
+  if (report.notRun > 0) parts.push(`${report.notRun} not run`);
+  const total = diffs.length + report.notRun;
+  return `${total} scenario${total === 1 ? "" : "s"} (base vs PR): ${parts.join(", ") || "none ran"}.`;
+}
+
 /** Things nobody checked. Always shown, whatever the verdict. */
 export function notTested(report: Report): string[] {
   const out = report.coverage.filter((c) => c.status === "UNTESTED").map((c) => `AC${c.index} has no scenario: ${c.text}`);
   if (report.notRun > 0) out.push(`${report.notRun} scenario result(s) did not run.`);
-  out.push(...report.risks);
+  // Confirmed regressions have their own section and untested ACs are listed above, so skip those risks.
+  out.push(...report.risks.filter((r) => !r.startsWith("Regression:") && !r.startsWith("Untested AC")));
   out.push("Code paths outside the scenarios listed here were not exercised.");
   return out;
 }
 
 const objective = (scenarios: Scenario[], id: string) => scenarios.find((s) => s.id === id)?.objective ?? id;
+
+/** " Greptile flagged this too." when the scenario was planned from a Greptile finding. */
+export const greptileNote = (scenarios: Scenario[], id: string) =>
+  scenarios.find((s) => s.id === id)?.sourceRefs.some((r) => r.startsWith("greptile:")) ? " Greptile flagged this too." : "";
 
 /** Jira comment body for a report. */
 export function reportAdf(session: Session, report: Report, scenarios: Scenario[], diffs: Diff[]): Node {
@@ -89,7 +115,7 @@ export function reportAdf(session: Session, report: Report, scenarios: Scenario[
     panel(
       VERDICT_PANEL[report.recommendation],
       para(text("Checked "), pr, text(" at "), code(short(session.headSha)), text(" against base "), code(short(session.baseSha)), text(".")),
-      para(text(`${report.passed} passed, ${report.failed} failed, ${report.inconclusive} inconclusive, ${report.notRun} not run.`)),
+      para(text(diffSummary(report, diffs))),
     ),
     heading(4, "Acceptance criteria"),
     report.coverage.length
@@ -100,7 +126,7 @@ export function reportAdf(session: Session, report: Report, scenarios: Scenario[
       : para(text("No acceptance criteria found on the issue.")),
     heading(4, "Regressions"),
     regressions.length
-      ? bullets(regressions.map((d) => [code(d.scenarioId), text(` ${objective(scenarios, d.scenarioId)}: passes on base, fails on PR (confirmed on rerun).`)]))
+      ? bullets(regressions.map((d) => [code(d.scenarioId), text(` ${objective(scenarios, d.scenarioId)}: passes on base, fails on PR (confirmed on rerun).${greptileNote(scenarios, d.scenarioId)}`)]))
       : para(text("None found in the scenarios that ran.")),
     ...(unclear.length
       ? [heading(4, "Needs a look"), bullets(unclear.map((d) => [code(d.scenarioId), text(` ${objective(scenarios, d.scenarioId)}: ${d.classification} (base ${d.base}, PR ${d.head}).`)]))]

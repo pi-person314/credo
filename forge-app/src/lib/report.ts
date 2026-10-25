@@ -10,6 +10,7 @@ import {
   type Scenario,
   type Session,
 } from "../contracts/index";
+import { diffSummary } from "./adf";
 import { appendEvents, getContext, getDiffs, getScenarios, getSession, saveReport, updateSession } from "./store";
 
 // Report = coverage + verdict from contracts/rules.ts, plus a markdown body for Jira / GitHub.
@@ -37,15 +38,18 @@ function risks(findings: Finding[], tested: string[], diffs: Diff[], acs: AcCove
     ...diffs.filter((d) => d.classification === "NEW_REGRESSION").map((d) => `Regression: ${d.scenarioId} passes on base, fails on PR`),
     ...diffs.filter((d) => d.classification === "FLAKY" || d.classification === "INCONCLUSIVE").map((d) => `${d.classification}: ${d.scenarioId}`),
     ...acs.filter((a) => a.status === "UNTESTED").map((a) => `Untested AC${a.index}: ${a.text}`),
-    ...findings.filter((f) => f.severity !== "low" && !tested.includes(f.id)).map((f) => `Untested ${f.severity} finding (${f.source}): ${f.description}`),
+    ...findings.filter((f) => f.severity !== "low" && !tested.includes(f.id)).map((f) => `Untested ${f.severity} finding (${f.source}): ${f.description.split("\n")[0]}`),
   ];
 }
 
+/** PR-side counts. A FLAKY or INCONCLUSIVE diff counts as inconclusive even if the PR run passed, matching AC coverage. */
 function counts(scenarios: Scenario[], diffs: Diff[]) {
   const c = { passed: 0, failed: 0, inconclusive: 0, notRun: 0 };
   for (const s of scenarios) {
-    const head = diffs.find((d) => d.scenarioId === s.id)?.head ?? "NOT_RUN";
-    if (head === "PASS") c.passed++;
+    const d = diffs.find((x) => x.scenarioId === s.id);
+    const head = d?.head ?? "NOT_RUN";
+    if (d && (d.classification === "FLAKY" || d.classification === "INCONCLUSIVE")) c.inconclusive++;
+    else if (head === "PASS") c.passed++;
     else if (head === "FAIL") c.failed++;
     else if (head === "INCONCLUSIVE") c.inconclusive++;
     else c.notRun++;
@@ -57,7 +61,7 @@ function markdown(session: Session, r: Omit<Report, "markdown">, scenarios: Scen
   const objective = (id: string) => scenarios.find((s) => s.id === id)?.objective ?? id;
   return [
     `**PR Confidence: ${r.recommendation}** for PR #${session.prNumber} (${session.baseSha.slice(0, 7)} → ${session.headSha.slice(0, 7)})`,
-    `${r.passed} passed · ${r.failed} failed · ${r.inconclusive} inconclusive · ${r.notRun} not run`,
+    diffSummary(r, diffs),
     "",
     "**Acceptance criteria**",
     ...(r.coverage.length ? r.coverage.map((a) => `- AC${a.index} ${a.status}: ${a.text}`) : ["- none found on the ticket"]),

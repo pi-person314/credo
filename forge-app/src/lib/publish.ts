@@ -3,7 +3,7 @@ import { kvs } from "@forge/kvs";
 import { createHash } from "node:crypto";
 import type { Route } from "@forge/api";
 import type { Actor, AuditEntry, Diff, EventType, Recommendation, Report, Run, Scenario, Session } from "../contracts/index";
-import { bugAdf, notTested, reportAdf, VERDICT_LABEL, type Evidence } from "./adf";
+import { bugAdf, greptileNote, diffSummary, notTested, reportAdf, VERDICT_LABEL, type Evidence } from "./adf";
 import { hasGithubToken, postPrComment, setCommitStatus, updatePrComment, type StatusState } from "./github-write";
 import { signSessionToken } from "../contracts/token";
 import { appendAudit, appendEvents, keys } from "./store";
@@ -83,14 +83,14 @@ export function reportMarkdown(session: Session, report: Report, scenarios: Scen
     `<!-- pr-confidence:session=${session.id} -->`,
     `### PR Confidence: ${VERDICT_LABEL[report.recommendation]}`,
     `Checked \`${session.headSha.slice(0, 7)}\` against base \`${session.baseSha.slice(0, 7)}\` for ${issue}.`,
-    `${report.passed} passed, ${report.failed} failed, ${report.inconclusive} inconclusive, ${report.notRun} not run.`,
+    diffSummary(report, diffs),
     "",
     "#### Acceptance criteria",
     rows.length ? ["| # | Criterion | Status | Scenarios |", "|---|---|---|---|", ...rows].join("\n") : "No acceptance criteria found on the issue.",
     "",
     "#### Regressions",
     regressions.length
-      ? regressions.map((d) => `- \`${d.scenarioId}\` ${name(d.scenarioId)}: passes on base, fails on this PR (confirmed on rerun).`).join("\n")
+      ? regressions.map((d) => `- \`${d.scenarioId}\` ${name(d.scenarioId)}: passes on base, fails on this PR (confirmed on rerun).${greptileNote(scenarios, d.scenarioId)}`).join("\n")
       : "None found in the scenarios that ran.",
     "",
     "#### What was not tested",
