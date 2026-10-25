@@ -98,7 +98,9 @@ export function artifactUrl(viewUrl: string | null, sessionId: string, path: str
   try {
     const u = new URL(viewUrl);
     const t = u.searchParams.get("t") ?? "";
-    return `${u.origin}/artifacts/${sessionId}/${path}?t=${encodeURIComponent(t)}`;
+    // Runner paths already start with the session id ("ses_…/sc_…/head-1/db.json"); add it only if missing.
+    const rel = path.startsWith(`${sessionId}/`) ? path : `${sessionId}/${path}`;
+    return `${u.origin}/artifacts/${rel}?t=${encodeURIComponent(t)}`;
   } catch {
     return null;
   }

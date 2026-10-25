@@ -224,7 +224,7 @@ function evidenceFor(session: Session, runs: Run[]): Evidence[] {
  * confirmed (panel click or Rovo "yes"); `actor` is their accountId. Filing the same scenario twice returns
  * the first key. Throws if the Bug could not be created.
  */
-export async function fileRegressionBug(session: Session, scenario: Scenario, diff: Diff, actor: string) {
+export async function fileRegressionBug(session: Session, scenario: Scenario, diff: Diff, actor: string, assigneeId?: string) {
   const existing = await kvs.get<string>(pubKeys.bug(session.id, scenario.id));
   if (existing) return existing;
 
@@ -239,7 +239,14 @@ export async function fileRegressionBug(session: Session, scenario: Scenario, di
     const type = await bugType(projectKey);
     const description = bugAdf(session, scenario, diff, headRuns, evidenceFor(session, runs));
     const fields = { project: { key: projectKey }, issuetype: { id: type.id }, summary, description, labels: ["credo"] };
-    key = (await jira<{ key: string }>("POST", route`/rest/api/3/issue`, { fields })).key;
+    // Assign it to the ticket's assignee. If Jira refuses the assignee (not assignable here), file it unassigned.
+    try {
+      key = (await jira<{ key: string }>("POST", route`/rest/api/3/issue`, { fields: assigneeId ? { ...fields, assignee: { accountId: assigneeId } } : fields })).key;
+    } catch (e) {
+      if (!assigneeId) throw e;
+      console.warn(`bug ${session.id}/${scenario.id}: assignee refused, filing unassigned: ${errText(e)}`);
+      key = (await jira<{ key: string }>("POST", route`/rest/api/3/issue`, { fields })).key;
+    }
   } catch (e) {
     await audit(session, { action: "jira.bug", target: session.issueKey, approvedBy: actor, inputs, reason: `create failed: ${errText(e)}`, result: "failed" });
     await emit(session, "agent", "bug.filed", false, `Bug for ${scenario.id} failed: ${errText(e)}`);

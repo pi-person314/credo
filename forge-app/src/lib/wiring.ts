@@ -16,7 +16,7 @@ registerPublishHook(async ({ session, report }) => {
 });
 
 registerBugHook(async ({ session, scenario, diff, context, approvedBy }) => {
-  const key = await fileRegressionBug(session, scenario, diff, approvedBy);
+  const key = await fileRegressionBug(session, scenario, diff, approvedBy, context?.jira?.assignee?.accountId);
   const issueUrl = context?.jira?.url;
   const browse = `/browse/${session.issueKey}`;
   return { key, url: issueUrl?.includes(browse) ? issueUrl.replace(browse, `/browse/${key}`) : undefined };

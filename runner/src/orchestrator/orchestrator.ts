@@ -19,6 +19,10 @@ import type { SandboxManager } from "../sandbox/manager.js";
 import type { Sink } from "../sink.js";
 import { Verifier } from "../verifier/verifier.js";
 
+/** Activity text for who wrote the scenarios: "written by Factory Droid", or the fallback that was used instead. */
+export const plannedBy = (source: string) =>
+  source.startsWith("droid") ? `written by Factory Droid${source.includes("retry") ? " (after one retry)" : ""}` : `from the ${source} fallback (Factory Droid unavailable)`;
+
 export interface SessionState {
   context: Context;
   status: SessionStatus;
@@ -181,9 +185,9 @@ export class Orchestrator {
 
     s.status = "PLANNING";
     const acs = context.jira?.acceptanceCriteria.length ?? 0;
-    await s.emit("planner", "planner.started", "start", `Planning from ${acs} acceptance criteria, ${context.findings.length} findings, ${context.changedFiles.length} files`);
+    await s.emit("planner", "planner.started", "start", `Factory Droid is planning tests from ${acs} acceptance criteria, ${context.findings.length} findings, ${context.changedFiles.length} files`);
     const plan = await this.d.planner.plan(context, s.startedAt + BUDGETS.firstReportMs);
-    await s.emit("planner", "planner.scenarios", plan.scenarios.length ? "ok" : "fail", `${plan.scenarios.length} scenarios (${plan.source})`, plan.scenarios);
+    await s.emit("planner", "planner.scenarios", plan.scenarios.length ? "ok" : "fail", `${plan.scenarios.length} scenarios ${plannedBy(plan.source)}`, plan.scenarios);
     if (!plan.scenarios.length) throw new Error(`planner produced no scenarios: ${plan.errors.slice(-2).join("; ")}`);
 
     s.status = "RUNNING";
@@ -193,7 +197,7 @@ export class Orchestrator {
     if (!over) {
       const follow = await this.d.planner.followups(context, s.scenarios, s.diffs);
       if (follow.scenarios.length) {
-        await s.emit("planner", "planner.scenarios", "ok", `${follow.scenarios.length} follow-up scenarios (${follow.source})`, follow.scenarios);
+        await s.emit("planner", "planner.scenarios", "ok", `${follow.scenarios.length} follow-up scenarios ${plannedBy(follow.source)}`, follow.scenarios);
         await this.runAll(s, follow.scenarios, true);
       }
     }
@@ -233,10 +237,10 @@ export class Orchestrator {
       .catch(() => undefined)
       .then(() => this.driving(s, async () => {
         await this.ensureSandboxes(s);
-        await s.emit("planner", "planner.started", "start", `Planning ask: ${prompt}`, { askId });
+        await s.emit("planner", "planner.started", "start", `Factory Droid is turning the ask into a test: ${prompt}`, { askId });
         const priorIds = [...s.context.priorScenarioIds, ...s.scenarios.map((x) => x.id)];
         const plan = await this.d.planner.ask({ ...s.context, priorScenarioIds: priorIds }, prompt, s.scenarios);
-        await s.emit("planner", "planner.scenarios", plan.scenarios.length ? "ok" : "fail", `${plan.scenarios.length} scenario for the ask (${plan.source})`, plan.scenarios);
+        await s.emit("planner", "planner.scenarios", plan.scenarios.length ? "ok" : "fail", `${plan.scenarios.length} scenario for the ask ${plannedBy(plan.source)}`, plan.scenarios);
         await this.runAll(s, plan.scenarios, false);
         const diffs = s.diffs.filter((d) => plan.scenarios.some((x) => x.id === d.scenarioId));
         await s.emit("planner", "ask.complete", plan.scenarios.length ? "ok" : "fail", plan.scenarios.length ? `Ask done: ${diffs.map((d) => `${d.scenarioId} ${d.classification}`).join(", ")}` : "Couldn't turn the ask into a test", {
