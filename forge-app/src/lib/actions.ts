@@ -16,6 +16,7 @@ import {
 } from "../contracts/index";
 import { signSessionToken } from "../contracts/token";
 import { summaryFromContext, type IngestSummary } from "./ingest-summary";
+import { isVagueAsk, VAGUE_ASK } from "./honest";
 import { runner } from "./runner";
 import {
   appendAudit,
@@ -123,6 +124,8 @@ export async function viewUrl(sessionId: string): Promise<Result<{ url: string }
 
 export async function askTest(sessionId: string, prompt: unknown): Promise<Result<{ ask: Ask }>> {
   const req = AskRequest.safeParse({ prompt: typeof prompt === "string" ? prompt.trim() : prompt });
+  // Vague asks ("?", "test") plan a meaningless scenario, so ask for the situation instead.
+  if (typeof prompt !== "string" || isVagueAsk(prompt)) return fail(VAGUE_ASK);
   if (!req.success) return fail("prompt must be 1-500 characters");
   return withSession(sessionId, async (s) => {
     const ask: Ask = { id: `ask_${randomUUID().slice(0, 8)}`, sessionId: s.id, prompt: req.data.prompt, createdAt: new Date().toISOString() };

@@ -9,6 +9,7 @@ import { signSessionToken, verifySessionToken } from "@pr-agent/contracts/token"
 import type { AgentFrame } from "../executor/browser.js";
 import { toPlaywrightSpec } from "../export/playwright.js";
 import type { Runtime } from "../runtime.js";
+import { QuickAction, QuickActions, RACE_KNOBS, hasQuickActions } from "./actions.js";
 import { viewPage } from "./page.js";
 
 /** P1 take-over: the reviewer drives the agent's browser from the live view. x/y are 0..1 of the frame. */
@@ -45,6 +46,7 @@ const DROP_RES = new Set(["connection", "content-length", "content-encoding", "t
 export async function viewRoutes(app: FastifyInstance, rt: Runtime) {
   const { orchestrator, sandboxes, browser, memory, cfg } = rt;
   const ok = (id: string, t: string | undefined) => verifySessionToken(cfg.token, id, t);
+  const quick = new QuickActions(sandboxes);
   const deny = (reply: FastifyReply) => reply.code(403).type("text/plain").send("Link expired or invalid. Reopen the live sandbox from the Jira panel.");
 
   await app.register(websocket);
@@ -101,6 +103,9 @@ export async function viewRoutes(app: FastifyInstance, rt: Runtime) {
       sandboxes: status,
       shas: s ? { base: s.context.session.baseSha, head: s.context.session.headSha } : undefined,
       knobs: s?.knobs,
+      quickActions: hasQuickActions(s?.context.manifest),
+      idleTtlMin: cfg.idleTtlMin,
+      lastActiveAt: sandboxes.lastActive(id),
       counts,
       scenarios: s?.scenarios.map((x) => ({ id: x.id, objective: x.objective, origin: x.origin, sourceRefs: x.sourceRefs })) ?? [],
       diffs: s?.diffs ?? [],
@@ -118,7 +123,23 @@ export async function viewRoutes(app: FastifyInstance, rt: Runtime) {
   app.post<{ Params: { id: string }; Querystring: { t?: string } }>("/view/:id/reset", async (req, reply) => {
     if (!ok(req.params.id, req.query.t)) return deny(reply);
     await orchestrator.reset(req.params.id);
+    quick.forget(req.params.id);
     return { ok: true };
+  });
+
+  // Quick actions: fresh order / pay / pay twice at once on one or both sides, with the result per side.
+  app.post<{ Params: { id: string }; Querystring: { t?: string } }>("/view/:id/action", async (req, reply) => {
+    const { id } = req.params;
+    if (!ok(id, req.query.t)) return deny(reply);
+    const body = QuickAction.parse(req.body);
+    const s = orchestrator.get(id);
+    if (!hasQuickActions(s.context.manifest)) return reply.code(400).send({ error: "This app has no order/pay API for quick actions." });
+    if (s.busy > 0) return reply.code(409).send({ error: "The agent is running tests. Try again when it finishes." });
+    const envs = body.env === "both" ? (["base", "head"] as const) : ([body.env] as const);
+    for (const env of envs) if (sandboxes.status(id)[env] !== "healthy") return reply.code(409).send({ error: `${env} sandbox is ${sandboxes.status(id)[env]}` });
+    if (body.action === "race") await orchestrator.knobs(id, RACE_KNOBS);
+    const results = await Promise.all(envs.map((env) => quick.run(id, env, body.action, s.context.manifest, s.knobs)));
+    return { ok: true, knobs: s.knobs, results };
   });
 
   app.post<{ Params: { id: string }; Querystring: { t?: string } }>("/view/:id/input", async (req, reply) => {
