@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Button, Frame, Inline, Label, LinkButton, SectionMessage, Select, Stack, Text, Textfield, Toggle } from "@forge/react";
+import { Box, Button, Frame, Inline, Label, LinkButton, SectionMessage, Select, Stack, Text, Textfield, Toggle, xcss } from "@forge/react";
 import type { Knobs, ProviderMode } from "../../contracts";
 
 type Props = {
@@ -50,8 +50,9 @@ export const Sandbox = ({ viewUrl, disabled, expired, onKnobs, onReset }: Props)
 
   // The embedded live view has its own knobs and reset, which show the current value, so don't repeat them here.
   const embedded = embed && !!viewUrl;
+  // Stacks hug their content by default, so without "fill" the embed shrinks to the width of the row above it.
   return (
-    <Stack space="space.200">
+    <Stack space="space.200" grow="fill">
       {embedded ? null : <Inline space="space.200" alignBlock="end" shouldWrap>
         <Stack space="space.050">
           <Label labelFor="knob-provider">Payment provider</Label>
@@ -93,7 +94,11 @@ export const Sandbox = ({ viewUrl, disabled, expired, onKnobs, onReset }: Props)
         <Toggle id="embed-live" isChecked={embed} onChange={() => setEmbed(!embed)} label="Embed live view" />
         <Text size="small">Embed live view</Text>
       </Inline>
-      {embed && viewUrl ? <Frame resource="live-view" height="520px" /> : null}
+      {embedded ? (
+        <Box xcss={xcss({ width: "100%" })}>
+          <Frame resource="live-view" height="520px" />
+        </Box>
+      ) : null}
     </Stack>
   );
 };
