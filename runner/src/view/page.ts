@@ -182,7 +182,7 @@ a { color: var(--accent); }
   <div class="hero" id="hero" hidden>
     <div class="grow">
       <b id="hero-title">Try the bug yourself: pay twice on both sides</b>
-      <p id="hero-text">Sets the provider to slow (800 ms), makes a fresh order on each side and clicks Pay twice at once. Then compare the charges.</p>
+      <p id="hero-text">Sets the provider to slow (800 ms), makes a fresh order on each side and clicks Pay twice at once, then puts your knobs back. Compare the charges.</p>
     </div>
     <button class="btn primary big" id="race">Pay twice on both</button>
   </div>
@@ -555,7 +555,7 @@ function paint() {
   $("hero").hidden = !showHero;
   if (showHero) {
     $("race").disabled = !canAct();
-    $("hero-text").textContent = !ready() ? "The sandboxes are starting. This unlocks when both are up." : s.busy ? "The agent is running tests on these sandboxes. This unlocks when it finishes, or watch it below." : "Sets the provider to slow (800 ms), makes a fresh order on each side and clicks Pay twice at once. Then compare the charges.";
+    $("hero-text").textContent = !ready() ? "The sandboxes are starting. This unlocks when both are up." : s.busy ? "The agent is running tests on these sandboxes. This unlocks when it finishes, or watch it below." : "Sets the provider to slow (800 ms), makes a fresh order on each side and clicks Pay twice at once, then puts your knobs back. Compare the charges.";
   }
   // per-side scores + diff highlight
   for (const env of ENVS) {

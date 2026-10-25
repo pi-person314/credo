@@ -3,13 +3,13 @@ import { extname, resolve, sep } from "node:path";
 import websocket from "@fastify/websocket";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { Env, KnobsRequest, viewPath, type LiveFrame } from "@pr-agent/contracts";
+import { Env, KnobsRequest, viewPath, type Knobs, type LiveFrame } from "@pr-agent/contracts";
 import { VIEWPORT } from "../executor/browser.js";
 import { signSessionToken, verifySessionToken } from "@pr-agent/contracts/token";
 import type { AgentFrame } from "../executor/browser.js";
 import { toPlaywrightSpec } from "../export/playwright.js";
 import type { Runtime } from "../runtime.js";
-import { QuickAction, QuickActions, RACE_KNOBS, hasQuickActions } from "./actions.js";
+import { QuickAction, QuickActions, hasQuickActions, withRaceKnobs } from "./actions.js";
 import { viewPage } from "./page.js";
 
 /** P1 take-over: the reviewer drives the agent's browser from the live view. x/y are 0..1 of the frame. */
@@ -137,8 +137,9 @@ export async function viewRoutes(app: FastifyInstance, rt: Runtime) {
     if (s.busy > 0) return reply.code(409).send({ error: "The agent is running tests. Try again when it finishes." });
     const envs = body.env === "both" ? (["base", "head"] as const) : ([body.env] as const);
     for (const env of envs) if (sandboxes.status(id)[env] !== "healthy") return reply.code(409).send({ error: `${env} sandbox is ${sandboxes.status(id)[env]}` });
-    if (body.action === "race") await orchestrator.knobs(id, RACE_KNOBS);
-    const results = await Promise.all(envs.map((env) => quick.run(id, env, body.action, s.context.manifest, s.knobs)));
+    const go = (knobs: Knobs) => Promise.all(envs.map((env) => quick.run(id, env, body.action, s.context.manifest, knobs)));
+    // "race" runs on slow knobs, then restores the reviewer's knobs.
+    const results = body.action === "race" ? await withRaceKnobs((k) => orchestrator.knobs(id, k), { ...s.knobs }, go) : await go(s.knobs);
     return { ok: true, knobs: s.knobs, results };
   });
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AppManifest, Env, Knobs } from "@pr-agent/contracts";
-import { QuickActions, hasQuickActions } from "../src/view/actions.js";
+import { QuickActions, RACE_KNOBS, hasQuickActions, withRaceKnobs } from "../src/view/actions.js";
 
 const manifest: AppManifest = {
   api: ["POST /api/orders", "POST /api/pay", "GET /api/orders/:id"],
@@ -76,5 +76,23 @@ describe("quick actions", () => {
     const qa = new QuickActions({ ...hooks, request: async () => ({ status: 500, body: "boom" }) } as never);
     const r = await qa.run("s", "base", "pay", manifest, knobs);
     expect(r.error).toMatch(/POST \/api\/orders -> 500/);
+  });
+
+  it("pay twice on both runs on slow knobs, then puts the reviewer's knobs back", async () => {
+    const set: Knobs[] = [];
+    const before: Knobs = { provider: "error", latencyMs: 0 };
+    const seen = await withRaceKnobs(async (k) => void set.push(k), before, async (k) => k);
+    expect(seen).toEqual(RACE_KNOBS);
+    expect(set).toEqual([RACE_KNOBS, before]);
+  });
+
+  it("restores the knobs even when the race fails, and skips the restore when nothing changed", async () => {
+    const set: Knobs[] = [];
+    const before: Knobs = { provider: "ok", latencyMs: 0 };
+    await expect(withRaceKnobs(async (k) => void set.push(k), before, async () => Promise.reject(new Error("boom")))).rejects.toThrow("boom");
+    expect(set).toEqual([RACE_KNOBS, before]);
+    set.length = 0;
+    await withRaceKnobs(async (k) => void set.push(k), { ...RACE_KNOBS }, async () => 1);
+    expect(set).toEqual([RACE_KNOBS]);
   });
 });
