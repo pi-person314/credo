@@ -1,5 +1,6 @@
 import { invoke } from "@forge/bridge";
 import type { Event, Knobs, SessionDetail } from "../contracts";
+import type { IngestSummary } from "../lib/ingest-summary";
 
 // Typed wrappers around the panel resolvers (PanelResolvers in contracts/api.ts).
 // Payloads match docs/SPEC.md section 8.
@@ -12,8 +13,11 @@ const action = (key: string, payload: Record<string, unknown>) =>
     return res;
   });
 
+/** What getSession returns: SessionDetail plus the Forge-only extras the panel reads (SessionView in lib/actions.ts). */
+export type PanelDetail = SessionDetail & { ingest?: IngestSummary };
+
 export const getSession = (issueKey?: string) =>
-  invoke<SessionDetail | null>("getSession", { issueKey }).then((d) => (d as SessionDetail | null) ?? null);
+  invoke<PanelDetail | null>("getSession", { issueKey }).then((d) => (d as PanelDetail | null) ?? null);
 
 export const getEvents = (sessionId: string, after?: string) =>
   invoke<Event[]>("getEvents", { sessionId, after }).then((e) => (Array.isArray(e) ? (e as Event[]) : []));

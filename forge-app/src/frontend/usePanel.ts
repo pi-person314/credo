@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useProductContext } from "@forge/react";
-import type { Event, SessionDetail } from "../contracts";
+import type { Event } from "../contracts";
 import * as api from "./api";
+import { backoffMs } from "./progress";
 import { isActive } from "./ui";
 
 // Loads the session for this issue and keeps it fresh.
 // Polls every 2s while the pipeline runs, and for a while after any user action
 // (asks, knobs, reset run on a READY session). Otherwise checks every 15s for Rovo-driven changes.
+// A failed poll keeps the last good data and backs off (backoffMs) until a poll works or Retry is clicked.
 
 const FAST_MS = 2_000;
 const IDLE_MS = 15_000;
@@ -25,11 +27,13 @@ export function usePanel() {
   const ctx = useProductContext();
   const ready = ctx !== undefined;
   const issueKey = (ctx?.extension as { issue?: { key?: string } } | undefined)?.issue?.key;
-  const [detail, setDetail] = useState<SessionDetail | null | undefined>(undefined);
+  const [detail, setDetail] = useState<api.PanelDetail | null | undefined>(undefined);
   const [events, setEvents] = useState<Event[]>([]);
   const [viewUrl, setViewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [failures, setFailures] = useState(0);
   const [kicks, setKicks] = useState(0);
+  const failed = useRef(0);
   const kickUntil = useRef(0);
   const lastTs = useRef<string | undefined>(undefined);
   const sessionId = useRef<string | undefined>(undefined);
@@ -52,9 +56,14 @@ export function usePanel() {
         setEvents((prev) => mergeEvents(prev, next));
       }
       setError(null);
+      failed.current = 0;
+      setFailures(0);
       return d;
     } catch (e) {
+      // Keep the last good detail and events; only the error and the failure count change.
       setError(api.errorText(e));
+      failed.current += 1;
+      setFailures(failed.current);
       return undefined;
     }
   }, [issueKey]);
@@ -66,6 +75,7 @@ export function usePanel() {
     const tick = async () => {
       const d = await load();
       if (stop) return;
+      if (failed.current) return void (timer = setTimeout(tick, backoffMs(failed.current)));
       const fast = (d && isActive(d.session.status)) || Date.now() < kickUntil.current;
       timer = setTimeout(tick, fast ? FAST_MS : IDLE_MS);
     };
@@ -82,5 +92,12 @@ export function usePanel() {
     setKicks((k) => k + 1); // restarts the loop now instead of after an idle wait
   }, []);
 
-  return { detail, events, viewUrl, error, kick };
+  /** Poll again now (the Retry button); the backoff starts over. */
+  const retry = useCallback(() => {
+    failed.current = 0;
+    setFailures(0);
+    setKicks((k) => k + 1);
+  }, []);
+
+  return { ready, detail, events, viewUrl, error, reconnecting: failures > 0 && detail !== undefined, kick, retry };
 }

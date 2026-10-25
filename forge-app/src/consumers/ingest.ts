@@ -13,10 +13,11 @@ import {
   type Session,
 } from "../contracts/index";
 import { readLinkedPages } from "../lib/confluence";
+import { ingestLogLine, type IngestSummary } from "../lib/ingest-summary";
 import { readGreptileFindings, readManifest, readPrFiles } from "../lib/github";
 import { readIssue, readRemoteLinks } from "../lib/jira";
 import { runner } from "../lib/runner";
-import { appendEvents, saveContext, saveSession, sessionForIssue } from "../lib/store";
+import { appendEvents, saveContext, saveIngestSummary, saveSession, sessionForIssue } from "../lib/store";
 
 // Queue consumer for jobs pushed by the github web trigger.
 // Every source is best effort: a failed read becomes a "fail" event, not a failed session.
@@ -58,16 +59,18 @@ function event(sessionId: string, type: Event["type"], status: Event["status"], 
 
 async function ingestPr(s: Session, job: z.output<typeof IngestJob>) {
   let files: ChangedFile[] = [];
+  let error: string | undefined;
   const events: Event[] = [];
   try {
     files = await readPrFiles(job);
     events.push(event(s.id, "ingest.pr", "ok", `PR #${s.prNumber}: ${files.length} changed files`, { files: files.map((f) => f.path) }));
   } catch (e) {
-    events.push(event(s.id, "ingest.pr", "fail", `Could not read PR files: ${errMsg(e)}`));
+    error = errMsg(e);
+    events.push(event(s.id, "ingest.pr", "fail", `Could not read PR files: ${error}`));
   }
   const manifest = await readManifest(job.repo, job.headSha);
   if (!manifest) events.push(event(s.id, "ingest.pr", "info", "No manifest.json in the repo, using the demo manifest"));
-  return { files, manifest: manifest ?? DEFAULT_MANIFEST, events };
+  return { files, error, manifest: manifest ?? DEFAULT_MANIFEST, defaultManifest: !manifest, events };
 }
 
 async function ingestJira(s: Session) {
@@ -75,9 +78,10 @@ async function ingestJira(s: Session) {
     const jira = await readIssue(s.issueKey);
     const n = jira.acceptanceCriteria.length;
     const msg = `${jira.key}: ${jira.summary} (${n} acceptance ${n === 1 ? "criterion" : "criteria"})`;
-    return { jira, events: [event(s.id, "ingest.jira", n ? "ok" : "info", msg, { acceptanceCriteria: jira.acceptanceCriteria })] };
+    return { jira, error: undefined, events: [event(s.id, "ingest.jira", n ? "ok" : "info", msg, { acceptanceCriteria: jira.acceptanceCriteria })] };
   } catch (e) {
-    return { jira: undefined, events: [event(s.id, "ingest.jira", "fail", `Could not read ${s.issueKey}: ${errMsg(e)}`)] };
+    const error = errMsg(e);
+    return { jira: undefined, error, events: [event(s.id, "ingest.jira", "fail", `Could not read ${s.issueKey}: ${error}`)] };
   }
 }
 
@@ -91,9 +95,10 @@ async function ingestConfluence(s: Session, jira?: JiraIssue) {
     const status = read.errors.length ? "fail" : pages.length ? "ok" : "info";
     const msg = `${pages.length} linked Confluence page${pages.length === 1 ? "" : "s"}`;
     const data = { titles: pages.map((p) => p.title), errors: read.errors };
-    return { pages, events: [event(s.id, "ingest.confluence", status, msg, data)] };
+    return { pages, errors: read.errors, events: [event(s.id, "ingest.confluence", status, msg, data)] };
   } catch (e) {
-    return { pages, events: [event(s.id, "ingest.confluence", "fail", `Could not read linked pages: ${errMsg(e)}`)] };
+    const error = errMsg(e);
+    return { pages, errors: [error], events: [event(s.id, "ingest.confluence", "fail", `Could not read linked pages: ${error}`)] };
   }
 }
 
@@ -101,7 +106,7 @@ async function ingestGreptile(s: Session, job: z.output<typeof IngestJob>) {
   const { findings, errors } = await readGreptileFindings(job, s.id, s.headSha);
   const status = errors.length ? "fail" : findings.length ? "ok" : "info";
   const msg = `${findings.length} Greptile finding${findings.length === 1 ? "" : "s"}`;
-  return { findings, events: [event(s.id, "ingest.greptile", status, msg, errors.length ? { errors } : undefined)] };
+  return { findings, errors, events: [event(s.id, "ingest.greptile", status, msg, errors.length ? { errors } : undefined)] };
 }
 
 /** A redelivered job for a PR head we already started. */
@@ -140,6 +145,15 @@ export async function ingest(raw: unknown) {
   const [pr, jira, greptile] = await Promise.all([ingestPr(session, job), ingestJira(session), ingestGreptile(session, job)]);
   const confluence = await ingestConfluence(session, jira.jira);
   await appendEvents(session.id, [...pr.events, ...jira.events, ...confluence.events, ...greptile.events]);
+  const summary: IngestSummary = {
+    at: new Date().toISOString(),
+    jira: { key: issueKey, criteria: jira.jira?.acceptanceCriteria.length ?? 0, error: jira.error },
+    confluence: { pages: confluence.pages.map((p) => ({ title: p.title, url: p.url })), errors: confluence.errors },
+    pr: { files: pr.files.length, error: pr.error, manifest: pr.defaultManifest ? "default" : "repo" },
+    greptile: { findings: greptile.findings.length, errors: greptile.errors },
+  };
+  await saveIngestSummary(session.id, summary);
+  console.log(ingestLogLine(session.id, summary));
 
   session = { ...session, status: "PREPARING" };
   await saveSession(session);

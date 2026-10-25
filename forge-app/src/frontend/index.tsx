@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import ForgeReconciler, {
+  Button,
   EmptyState,
+  Inline,
   SectionMessage,
   Spinner,
   Stack,
@@ -12,6 +14,7 @@ import ForgeReconciler, {
 } from "@forge/react";
 import type { Knobs } from "../contracts";
 import * as api from "./api";
+import { isRunnerGone, progress, sandboxesExpired } from "./progress";
 import { usePanel } from "./usePanel";
 import { sandboxState } from "./ui";
 import { Activity } from "./sections/Activity";
@@ -26,19 +29,44 @@ import { Tests } from "./sections/Tests";
 // UI Kit only: no <div>, no third-party React components.
 type Notice = { kind: "success" | "error"; text: string } | null;
 
+const Loading = () => (
+  <Inline space="space.100" alignBlock="center">
+    <Spinner size="small" label="Loading" />
+    <Text>Loading Credo…</Text>
+  </Inline>
+);
+
 const App = () => {
-  const { detail, events, viewUrl, error, kick } = usePanel();
+  const { detail, events, viewUrl, error, reconnecting, kick, retry } = usePanel();
   const [notice, setNotice] = useState<Notice>(null);
   const [resetting, setResetting] = useState(false);
+  // Set when a runner call came back 404 (runner forgot the session): which session, and the event count then.
+  const [gone, setGone] = useState<{ id: string; at: number } | null>(null);
 
   if (detail === undefined)
-    return error ? <SectionMessage appearance="error" title="Could not load Credo"><Text>{error}</Text></SectionMessage> : <Spinner />;
+    return error ? (
+      <SectionMessage appearance="error" title="Could not load Credo">
+        <Stack space="space.100">
+          <Text>{error}</Text>
+          <Inline>
+            <Button onClick={retry}>Retry</Button>
+          </Inline>
+        </Stack>
+      </SectionMessage>
+    ) : (
+      <Loading />
+    );
   if (detail === null)
     return <EmptyState header="No PR yet" description="Open a PR with this issue key in its title or branch." />;
 
   const id = detail.session.id;
+  // Sandboxes torn down (teardown event, or a runner 404 with no rebuild since): show the notice, lock the controls.
+  const torn = sandboxesExpired(events);
+  const lost = gone?.id === id && !events.slice(gone.at).some((e) => e.type === "sandbox.building" || e.type === "sandbox.healthy");
+  const expired = torn.expired ? { reason: torn.reason } : lost ? {} : null;
   // No sandbox events yet (older sessions, events not wired): don't lock the controls.
-  const sandboxUp = sandboxState(events) === "healthy" || !events.some((e) => e.type.startsWith("sandbox."));
+  const sandboxUp = !expired && (sandboxState(events) === "healthy" || !events.some((e) => e.type.startsWith("sandbox.")));
+  const { asks: askStates, busy } = progress(detail, events);
 
   /** Runs one resolver call, shows the outcome, then polls fast so the result lands quickly. */
   const act = async (fn: () => Promise<unknown>, ok: string) => {
@@ -48,7 +76,9 @@ const App = () => {
       kick();
       return true;
     } catch (e) {
-      setNotice({ kind: "error", text: api.errorText(e) });
+      const text = api.errorText(e);
+      if (isRunnerGone(text)) setGone({ id, at: events.length });
+      setNotice({ kind: "error", text });
       return false;
     }
   };
@@ -67,10 +97,15 @@ const App = () => {
 
   return (
     <Stack space="space.200">
-      <Header detail={detail} events={events} onReset={onReset} canReset={sandboxUp && !resetting} />
-      {error ? (
-        <SectionMessage appearance="warning" title="Refresh failed">
-          <Text>{error}</Text>
+      <Header detail={detail} events={events} busy={busy} onReset={onReset} canReset={sandboxUp && !resetting} />
+      {reconnecting ? (
+        <SectionMessage appearance="warning" title="Reconnecting…">
+          <Stack space="space.100">
+            <Text>Showing the last data we loaded. {error ? `Last error: ${error}` : ""}</Text>
+            <Inline>
+              <Button onClick={retry}>Retry now</Button>
+            </Inline>
+          </Stack>
         </SectionMessage>
       ) : null}
       {notice ? (
@@ -90,12 +125,12 @@ const App = () => {
           <Criteria detail={detail} />
         </TabPanel>
         <TabPanel>
-          <Sandbox viewUrl={viewUrl} disabled={!sandboxUp || resetting} onKnobs={onKnobs} onReset={onReset} />
+          <Sandbox viewUrl={viewUrl} disabled={!sandboxUp || resetting} expired={expired} onKnobs={onKnobs} onReset={onReset} />
         </TabPanel>
         <TabPanel>
           <Stack space="space.300">
             <Tests detail={detail} viewUrl={viewUrl} />
-            <Ask detail={detail} disabled={!sandboxUp} onAsk={onAsk} />
+            <Ask detail={detail} states={askStates} disabled={!sandboxUp} onAsk={onAsk} />
           </Stack>
         </TabPanel>
         <TabPanel>

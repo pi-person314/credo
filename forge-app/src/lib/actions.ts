@@ -15,6 +15,7 @@ import {
   type Session,
 } from "../contracts/index";
 import { signSessionToken } from "../contracts/token";
+import { summaryFromContext, type IngestSummary } from "./ingest-summary";
 import { isVagueAsk, VAGUE_ASK } from "./honest";
 import { runner } from "./runner";
 import {
@@ -24,6 +25,7 @@ import {
   getAudit,
   getContext,
   getDiffs,
+  getIngestSummary,
   getReport,
   getRuns,
   getSandbox,
@@ -43,7 +45,7 @@ export type Result<T = object> = ({ ok: true } & T) | { ok: false; error: string
 const fail = (error: string) => ({ ok: false as const, error });
 
 /** SessionDetail plus Forge-only extras the panel shows before the first report. */
-export type SessionView = SessionDetail & { sandbox: SandboxStatus; criteria: string[] };
+export type SessionView = SessionDetail & { sandbox: SandboxStatus; criteria: string[]; ingest?: IngestSummary };
 
 // ---------- hooks the publish module plugs in ----------
 
@@ -83,7 +85,7 @@ async function withSession<T>(sessionId: string, fn: (s: Session) => Promise<Res
 export async function loadDetail(sessionId: string): Promise<SessionView | null> {
   const session = await getSession(sessionId);
   if (!session) return null;
-  const [context, scenarios, runs, diffs, asks, report, audit, sandbox] = await Promise.all([
+  const [context, scenarios, runs, diffs, asks, report, audit, sandbox, ingest] = await Promise.all([
     getContext(sessionId),
     getScenarios(sessionId),
     getRuns(sessionId),
@@ -92,12 +94,15 @@ export async function loadDetail(sessionId: string): Promise<SessionView | null>
     getReport(sessionId),
     getAudit(session.issueKey),
     getSandbox(sessionId),
+    getIngestSummary(sessionId),
   ]);
   const raw = { session, findings: context?.findings ?? [], scenarios, runs, diffs, asks, report, audit };
   const parsed = SessionDetail.safeParse(raw);
   if (!parsed.success) console.warn(`SessionDetail ${sessionId} off-schema: ${parsed.error.issues[0]?.path.join(".")}`);
   const detail = parsed.success ? parsed.data : (raw as SessionDetail);
-  return { ...detail, sandbox, criteria: context?.jira?.acceptanceCriteria ?? [] };
+  // Sessions ingested before ingest:<id> existed: rebuild the counts from the stored Context.
+  const sources = ingest ?? (context ? summaryFromContext(context) : undefined);
+  return { ...detail, sandbox, criteria: context?.jira?.acceptanceCriteria ?? [], ingest: sources };
 }
 
 export async function detailForIssue(issueKey: string) {

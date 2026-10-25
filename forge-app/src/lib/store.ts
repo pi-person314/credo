@@ -12,6 +12,7 @@ import type {
   Scenario,
   Session,
 } from "../contracts/index";
+import type { IngestSummary } from "./ingest-summary";
 
 // All app state lives in Forge KVS. Key layout is in docs/SPEC.md section 8.
 // KVS values have a size limit, so events are stored in chunks of EVENTS_PER_CHUNK.
@@ -31,6 +32,7 @@ export const keys = {
   // Not in the spec table: Forge-only extras the panel and report need.
   context: (id: string) => `context:${id}`, // Context sent to the runner (findings, acceptance criteria)
   sandbox: (id: string) => `sandbox:${id}`, // SandboxStatus below
+  ingest: (id: string) => `ingest:${id}`, // IngestSummary: what ingest read (panel Sources block)
 };
 
 /** Live sandbox state, projected from sandbox.* and knobs.set events. */
@@ -64,6 +66,8 @@ export async function updateSession(id: string, patch: Partial<Session>) {
 
 export const saveContext = (context: Context) => kvs.set(keys.context(context.session.id), context);
 export const getContext = (id: string) => kvs.get<Context>(keys.context(id));
+export const saveIngestSummary = (id: string, summary: IngestSummary) => kvs.set(keys.ingest(id), summary);
+export const getIngestSummary = (id: string) => kvs.get<IngestSummary>(keys.ingest(id));
 
 // ---------- lists keyed by session ----------
 

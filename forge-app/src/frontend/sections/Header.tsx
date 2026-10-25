@@ -3,10 +3,10 @@ import { Button, Heading, Inline, Link, Lozenge, Stack, Text } from "@forge/reac
 import type { Event, SessionDetail } from "../../contracts";
 import { isActive, sandboxLook, sandboxState, verdictLook, verdictText } from "../ui";
 
-type Props = { detail: SessionDetail; events: Event[]; onReset: () => void; canReset: boolean };
+type Props = { detail: SessionDetail; events: Event[]; busy: string | null; onReset: () => void; canReset: boolean };
 
-// Verdict, PR link, pipeline + sandbox status, Reset.
-export const Header = ({ detail, events, onReset, canReset }: Props) => {
+// Verdict, PR link, pipeline + sandbox status, what the runner is busy with, Reset.
+export const Header = ({ detail, events, busy, onReset, canReset }: Props) => {
   const { session } = detail;
   const verdict = detail.report?.recommendation ?? session.recommendation;
   const sandbox = sandboxState(events);
@@ -31,6 +31,7 @@ export const Header = ({ detail, events, onReset, canReset }: Props) => {
         <Lozenge appearance={isActive(session.status) ? "inprogress" : session.status === "FAILED" ? "removed" : "success"}>
           {session.status}
         </Lozenge>
+        {busy ? <Lozenge appearance="inprogress">{busy}</Lozenge> : null}
         <Text>Sandbox</Text>
         <Lozenge appearance={sandboxLook[sandbox]}>{sandbox}</Lozenge>
         {session.prUrl ? (
